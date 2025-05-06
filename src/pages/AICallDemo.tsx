@@ -8,7 +8,6 @@ import CallTimer from "@/components/CallTimer";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import AvatarAnimation from "@/components/AvatarAnimation";
-import AgentInstructions from "@/components/AgentInstructions";
 import { Mic, Volume2, Settings, Phone, PhoneOff, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -19,18 +18,12 @@ const AICallDemo = () => {
   const [conversationText, setConversationText] = useState("مرحباً، أنا سلمى. يمكنني مساعدتك اليوم؟");
   const [audioSource, setAudioSource] = useState<string | undefined>();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [showInstructions, setShowInstructions] = useState(false);
   const [callActive, setCallActive] = useState(false);
   const [callStartTime, setCallStartTime] = useState<Date>(new Date());
   const { toast } = useToast();
 
-  // المحادثات النموذجية
-  const demoResponses = [
-    "مرحباً، أنا سلمى. يمكنني مساعدتك اليوم؟",
-    "يمكنك الاستعلام عن حالة المعاش من خلال رقم البطاقة على الموقع الرسمي",
-    "لتقديم طلب معاش جديد، يجب زيارة أقرب مكتب تابع للوزارة مع المستندات المطلوبة",
-    "يمكنني مساعدتك في الإجابة على استفساراتك حول خدمات وزارة التضامن الاجتماعي"
-  ];
+  // تجنب تكرار الصوت - نستخدم مرجع لتتبع حالة التشغيل الحالية
+  const firstMessagePlayed = React.useRef(false);
 
   // دالة لتحويل النص إلى كلام باستخدام Eleven Labs
   const speakText = useCallback(async (text: string) => {
@@ -73,24 +66,17 @@ const AICallDemo = () => {
     setIsSpeaking(false);
   };
 
-  // تبديل الحالة عند كل استجابة جديدة
+  // فقط قم بتشغيل الرسالة الأولى مرة واحدة عند بدء المكالمة
   useEffect(() => {
-    if (!callActive) return;
+    if (callActive && !firstMessagePlayed.current) {
+      firstMessagePlayed.current = true;
+      speakText("مرحباً، أنا سلمى. يمكنني مساعدتك اليوم؟");
+    }
     
-    let currentIndex = 0;
-    const textInterval = setInterval(() => {
-      currentIndex = (currentIndex + 1) % demoResponses.length;
-      const newText = demoResponses[currentIndex];
-      setConversationText(newText);
-      
-      // تحويل النص الجديد إلى كلام
-      speakText(newText);
-    }, 20000); // زيادة الفترة بين الرسائل لإتاحة وقت أطول للتحدث
-
-    // تحويل النص الأول إلى كلام عند التحميل
-    speakText(demoResponses[0]);
-
-    return () => clearInterval(textInterval);
+    // عند إنهاء المكالمة، إعادة ضبط المؤشر
+    if (!callActive) {
+      firstMessagePlayed.current = false;
+    }
   }, [callActive, speakText]);
 
   const handleMuteClick = () => {
@@ -195,7 +181,7 @@ const AICallDemo = () => {
               {/* خلفية تظهر كشاشة هاتف */}
               <div className="absolute inset-0 bg-gradient-to-b from-ministry-dark/90 to-ministry-dark/70"></div>
               
-              {/* الشخصية المتحركة */}
+              {/* الشخصية المتحركة - فصلها تماماً عن أي عناصر أخرى */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <AvatarAnimation isActive={isSpeaking} isListening={!isSpeaking && callActive} />
               </div>
@@ -209,7 +195,7 @@ const AICallDemo = () => {
                 </div>
               </div>
 
-              {/* نص كلام المساعد الافتراضي */}
+              {/* نص كلام المساعد الافتراضي - في الأسفل وليس على الصورة */}
               <div className="absolute bottom-24 left-0 right-0 mx-auto w-[85%] z-10">
                 <div className="bg-white/15 backdrop-blur-lg border border-white/20 text-white p-4 rounded-xl animate-fade-in mb-4">
                   <p className="text-xl text-right">{conversationText}</p>
