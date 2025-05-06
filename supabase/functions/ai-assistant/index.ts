@@ -23,6 +23,8 @@ serve(async (req) => {
       throw new Error("الرسالة مطلوبة");
     }
     
+    console.log("استلام طلب لمساعد الذكاء الاصطناعي:", userMessage.substring(0, 50) + "...");
+    
     // استخدام OpenAI للحصول على رد ذكي
     const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -31,7 +33,7 @@ serve(async (req) => {
         "Authorization": `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "gpt-4",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
@@ -58,6 +60,8 @@ serve(async (req) => {
     if (!response) {
       throw new Error("لم يتم استلام رد من المساعد الذكي");
     }
+    
+    console.log("تم الحصول على رد من المساعد الذكي بنجاح");
     
     return new Response(
       JSON.stringify({

@@ -53,36 +53,47 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
     };
   }, [isActive]);
 
-  // حركة الفم عند التحدث محسنة
+  // حركة الفم عند التحدث محسنة - تزامن الشفاه مع الصوت
   useEffect(() => {
     if (!mouthRef.current) return;
     
     let animationFrame: number;
     if (isActive) {
-      // إنشاء تأثير حركة شفاه أكثر طبيعية
-      const mouthPatterns = [0, 1, 2, 3, 2, 1, 0, 2, 3, 2, 1, 0]; // أنماط مختلفة للحركة
+      // إنشاء نمط حركة شفاه أكثر تزامنًا مع الصوت
+      const mouthPatterns = [
+        { height: 1, width: 14, opacity: 0.6 },  // مغلق
+        { height: 2, width: 13, opacity: 0.7 },  // مفتوح قليلاً
+        { height: 4, width: 12, opacity: 0.8 },  // مفتوح متوسط
+        { height: 6, width: 11, opacity: 0.9 },  // مفتوح كثيرًا
+        { height: 5, width: 11.5, opacity: 0.85 }, // متوسط
+        { height: 3, width: 12.5, opacity: 0.75 }, // قليل
+      ];
+      
       let patternIndex = 0;
+      let speed = 0;
       
       const animateMouth = () => {
         if (mouthRef.current) {
           // تحديث شكل الفم بناءً على النمط الحالي
-          const openness = mouthPatterns[patternIndex % mouthPatterns.length];
+          const pattern = mouthPatterns[patternIndex % mouthPatterns.length];
           
-          mouthRef.current.style.height = `${Math.max(1, openness)}px`;
-          mouthRef.current.style.opacity = `${0.6 + (openness / 10)}`;
-          mouthRef.current.style.width = `${14 - (openness * 0.5)}%`; // تغيير عرض الفم
+          mouthRef.current.style.height = `${pattern.height}px`;
+          mouthRef.current.style.opacity = `${pattern.opacity}`;
+          mouthRef.current.style.width = `${pattern.width}%`;
           
-          // التحرك للنمط التالي
+          // التحرك للنمط التالي بسرعة متغيرة
           patternIndex++;
           
-          // سرعة متغيرة للتحرك بين الأنماط
-          const speed = Math.random() * 100 + 80; // بين 80 و180 مللي ثانية
+          // سرعة متغيرة للتحرك بين الأنماط لمحاكاة الكلام الطبيعي
+          speed = Math.random() * 60 + 50; // بين 50 و110 مللي ثانية
+          
           setTimeout(() => {
             animationFrame = requestAnimationFrame(animateMouth);
           }, speed);
         }
       };
       
+      // بدء حركة الفم فورًا
       animationFrame = requestAnimationFrame(animateMouth);
     } else {
       // فم مغلق عند عدم التحدث
@@ -183,9 +194,9 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
         </div>
       </div>
       
-      {/* حالة الاستماع - محسنة */}
+      {/* حالة الاستماع - محسنة مع تأثير نبض */}
       {isListening && (
-        <div className="absolute top-8 right-8 flex items-center gap-2">
+        <div className="absolute top-8 right-8 flex items-center gap-2 animate-pulse">
           <div className="flex space-x-1 rtl:space-x-reverse">
             {Array.from({ length: 3 }).map((_, i) => (
               <div 

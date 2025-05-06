@@ -27,6 +27,8 @@ export const useAIAssistant = () => {
       setIsLoading(true);
       setError(null);
       
+      console.log("🔍 إرسال استفسار إلى المساعد الذكي:", userMessage.substring(0, 50) + "...");
+      
       // استخدام Supabase Edge Function للتواصل مع OpenAI
       const { data, error } = await supabase.functions.invoke('ai-assistant', {
         body: { 
@@ -36,21 +38,26 @@ export const useAIAssistant = () => {
       });
 
       if (error) {
-        console.error('خطأ في التواصل مع المساعد الذكي:', error);
+        console.error('❌ خطأ في التواصل مع المساعد الذكي:', error);
         setError('فشل في الحصول على رد من المساعد الذكي');
         if (onError) onError('فشل في الحصول على رد من المساعد الذكي');
         return null;
       }
 
       if (data && data.response) {
+        console.log("✅ تم استلام رد من المساعد الذكي بنجاح");
         setResponse(data.response);
         if (onResponse) onResponse(data.response);
         return data.response;
+      } else {
+        console.error('❌ لم يتم استلام رد من المساعد الذكي');
+        setError('لم يتم استلام رد من المساعد الذكي');
+        if (onError) onError('لم يتم استلام رد من المساعد الذكي');
       }
       
       return null;
     } catch (err) {
-      console.error('خطأ في التواصل مع المساعد الذكي:', err);
+      console.error('❌ خطأ في التواصل مع المساعد الذكي:', err);
       setError('حدث خطأ أثناء التواصل مع المساعد الذكي');
       if (onError) onError('حدث خطأ أثناء التواصل مع المساعد الذكي');
       return null;
@@ -62,6 +69,8 @@ export const useAIAssistant = () => {
   // تحويل النص إلى كلام
   const textToSpeech = useCallback(async (text: string, voice?: string) => {
     try {
+      console.log("🔊 تحويل النص إلى كلام:", text.substring(0, 50) + "...");
+      
       // قراءة إعدادات الصوت من localStorage إن وجدت
       const savedSettings = localStorage.getItem('aiSettings');
       const settings = savedSettings ? JSON.parse(savedSettings) : {};
@@ -71,17 +80,22 @@ export const useAIAssistant = () => {
         body: { text, voice: voiceId },
       });
       
-      if (error) throw error;
+      if (error) {
+        console.error("❌ خطأ في تحويل النص إلى كلام:", error);
+        throw error;
+      }
       
       if (data && data.audio) {
+        console.log("✅ تم تحويل النص إلى كلام بنجاح");
         // تحويل Base64 إلى مصدر صوتي
         const audioDataUrl = `data:audio/mp3;base64,${data.audio}`;
         return audioDataUrl;
       }
 
+      console.error("❌ لم يتم استلام بيانات صوتية من الخدمة");
       return null;
     } catch (error) {
-      console.error("خطأ في تحويل النص إلى كلام:", error);
+      console.error("❌ خطأ في تحويل النص إلى كلام:", error);
       setError("فشل في تحويل النص إلى كلام");
       return null;
     }

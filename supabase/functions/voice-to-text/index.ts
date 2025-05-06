@@ -51,6 +51,8 @@ serve(async (req) => {
       throw new Error('لم يتم توفير بيانات صوتية')
     }
 
+    console.log("استلام بيانات صوتية للتحويل إلى نص، حجم البيانات:", audio.length);
+
     // معالجة الصوت بشكل متقطع
     const binaryAudio = processBase64Chunks(audio)
     
@@ -60,6 +62,8 @@ serve(async (req) => {
     formData.append('file', blob, 'audio.webm')
     formData.append('model', 'whisper-1')
     formData.append('language', 'ar') // تحديد اللغة العربية
+
+    console.log("إرسال الطلب إلى OpenAI Whisper API...");
 
     // إرسال إلى OpenAI
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
@@ -71,11 +75,13 @@ serve(async (req) => {
     })
 
     if (!response.ok) {
-      console.error(`OpenAI API error: ${await response.text()}`)
-      throw new Error(`خطأ في OpenAI API: ${response.status}`)
+      const errorText = await response.text();
+      console.error(`OpenAI API error: ${errorText}`);
+      throw new Error(`خطأ في OpenAI API: ${response.status}`);
     }
 
-    const result = await response.json()
+    const result = await response.json();
+    console.log("تم تحويل الصوت إلى نص بنجاح:", result.text);
 
     return new Response(
       JSON.stringify({ text: result.text }),
@@ -83,7 +89,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('خطأ في تحويل الصوت إلى نص:', error)
+    console.error('خطأ في تحويل الصوت إلى نص:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       {

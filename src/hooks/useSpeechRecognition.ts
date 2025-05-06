@@ -25,6 +25,8 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
     try {
       setIsProcessing(true);
       
+      console.log("🎤 بدء تحويل الصوت إلى نص...");
+      
       // تحويل الصوت إلى قاعدة64
       const audioBase64 = await blobToBase64(audioBlob);
       
@@ -33,21 +35,26 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
       });
 
       if (error) {
-        console.error('خطأ في تحويل الصوت إلى نص:', error);
+        console.error('❌ خطأ في تحويل الصوت إلى نص:', error);
         setError('فشل في تحويل الصوت إلى نص');
         if (onError) onError('فشل في تحويل الصوت إلى نص');
         return null;
       }
 
       if (data && data.text) {
+        console.log("✅ تم تحويل الصوت إلى نص بنجاح:", data.text);
         setTranscript(data.text);
         if (onResult) onResult(data.text);
         return data.text;
+      } else {
+        console.error('❌ لم يتم العثور على نص في الاستجابة');
+        setError('لم يتم التعرف على أي كلام');
+        if (onError) onError('لم يتم التعرف على أي كلام');
       }
       
       return null;
     } catch (err) {
-      console.error('خطأ في معالجة الصوت:', err);
+      console.error('❌ خطأ في معالجة الصوت:', err);
       setError('حدث خطأ أثناء معالجة الصوت');
       if (onError) onError('حدث خطأ أثناء معالجة الصوت');
       return null;
@@ -77,12 +84,24 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
       setError(null);
       audioChunksRef.current = [];
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log("🎤 طلب إذن الوصول إلى الميكروفون...");
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        }
+      });
       
-      const mediaRecorder = new MediaRecorder(stream);
+      console.log("✅ تم الحصول على إذن الوصول إلى الميكروفون");
+      
+      const mediaRecorder = new MediaRecorder(stream, { 
+        mimeType: 'audio/webm',
+      });
       mediaRecorderRef.current = mediaRecorder;
       
       mediaRecorder.onstart = () => {
+        console.log("🎤 بدأ التسجيل الصوتي");
         audioChunksRef.current = [];
         setIsListening(true);
       };
@@ -94,11 +113,15 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
       };
       
       mediaRecorder.onstop = async () => {
+        console.log("🎤 توقف التسجيل الصوتي، جاري معالجة البيانات...");
         setIsListening(false);
         
         if (audioChunksRef.current.length > 0) {
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          console.log("✅ تم إنشاء ملف صوتي بحجم:", audioBlob.size, "بايت");
           await transcribeAudio(audioBlob);
+        } else {
+          console.log("⚠️ لم يتم التقاط أي بيانات صوتية");
         }
         
         // إغلاق جميع المسارات
@@ -108,7 +131,7 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
       mediaRecorder.start();
       
     } catch (err) {
-      console.error('خطأ في الوصول إلى الميكروفون:', err);
+      console.error('❌ خطأ في الوصول إلى الميكروفون:', err);
       setError('لا يمكن الوصول إلى الميكروفون');
       setIsListening(false);
       if (onError) onError('لا يمكن الوصول إلى الميكروفون');
@@ -118,6 +141,7 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
   // إيقاف الاستماع
   const stopListening = useCallback(() => {
     if (mediaRecorderRef.current && isListening) {
+      console.log("🛑 إيقاف التسجيل الصوتي");
       mediaRecorderRef.current.stop();
     }
   }, [isListening]);
@@ -125,11 +149,13 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
   // بدء الاستماع تلقائيًا إذا كان مطلوبًا
   useEffect(() => {
     if (autoStart) {
+      console.log("🔄 بدء التسجيل التلقائي");
       startListening();
     }
     
     return () => {
       if (mediaRecorderRef.current && isListening) {
+        console.log("🧹 تنظيف مصادر التسجيل الصوتي");
         mediaRecorderRef.current.stop();
       }
     };

@@ -21,17 +21,18 @@ serve(async (req) => {
 
   try {
     // استلام النص المراد تحويله إلى كلام
-    const { text } = await req.json();
+    const { text, voice = VOICE_ID } = await req.json();
 
     if (!text) {
       throw new Error("لم يتم توفير نص للتحويل");
     }
 
     console.log("محاولة تحويل النص:", text);
+    console.log("استخدام صوت ElevenLabs ID:", voice);
 
     // إرسال طلب إلى Eleven Labs API
     const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`,
+      `https://api.elevenlabs.io/v1/text-to-speech/${voice}`,
       {
         method: "POST",
         headers: {
@@ -43,8 +44,8 @@ serve(async (req) => {
           text: text,
           model_id: "eleven_multilingual_v2",
           voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.75,
+            stability: 0.65,
+            similarity_boost: 0.9,
           },
         }),
       }
@@ -55,6 +56,8 @@ serve(async (req) => {
       console.error("خطأ من Eleven Labs API:", errorText);
       throw new Error(`فشل في تحويل النص إلى كلام: ${response.status}`);
     }
+
+    console.log("تم تحويل النص إلى كلام بنجاح، جاري معالجة البيانات الصوتية");
 
     // الحصول على البيانات الصوتية وتحويلها إلى Base64
     const audioArrayBuffer = await response.arrayBuffer();

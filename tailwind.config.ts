@@ -1,11 +1,15 @@
 
 import type { Config } from "tailwindcss";
-import animatePlugin from "tailwindcss-animate";
+import { fontFamily } from "tailwindcss/defaultTheme";
 
-const config = {
+const config: Config = {
   darkMode: ["class"],
-  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
-  prefix: "",
+  content: [
+    "./src/**/*.{js,ts,jsx,tsx}",
+    "./pages/**/*.{js,ts,jsx,tsx}",
+    "./components/**/*.{js,ts,jsx,tsx}",
+    "./app/**/*.{js,ts,jsx,tsx}",
+  ],
   theme: {
     container: {
       center: true,
@@ -16,23 +20,18 @@ const config = {
     },
     extend: {
       colors: {
+        ministry: {
+          light: "#f3f9fa",
+          DEFAULT: "#29b0c9",
+          dark: "#112d32",
+          green: "#56c596",
+          red: "#ef476f",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
-        sidebar: {
-          DEFAULT: "hsl(var(--sidebar-background))",
-          foreground: "hsl(var(--sidebar-foreground))",
-          primary: {
-            DEFAULT: "hsl(var(--sidebar-primary))",
-            foreground: "hsl(var(--sidebar-primary-foreground))",
-          },
-          accent: {
-            DEFAULT: "hsl(var(--sidebar-accent))",
-            foreground: "hsl(var(--sidebar-accent-foreground))",
-          },
-        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -61,63 +60,60 @@ const config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // ألوان وزارة التضامن الاجتماعي
-        ministry: {
-          light: "#f5f5f5",
-          dark: "#26365a",
-          green: "#4caf50",
-          red: "#f44336",
-        },
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      fontFamily: {
+        sans: ["var(--font-sans)", ...fontFamily.sans],
+      },
       keyframes: {
         "accordion-down": {
-          from: { height: "0" },
+          from: { height: 0 },
           to: { height: "var(--radix-accordion-content-height)" },
         },
         "accordion-up": {
           from: { height: "var(--radix-accordion-content-height)" },
-          to: { height: "0" },
-        },
-        "subtle-pulse": {
-          "0%, 100%": { transform: "scale(1)" },
-          "50%": { transform: "scale(1.01)" },
-        },
-        "wave": {
-          "0%, 100%": { height: "5px" },
-          "50%": { height: "16px" },
-        },
-        "blink": {
-          "0%, 100%": { height: "4px", opacity: "1" },
-          "50%": { height: "1px", opacity: "0.2" },
+          to: { height: 0 },
         },
         "fade-in": {
           "0%": { opacity: "0", transform: "translateY(10px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" },
+          "100%": { opacity: "1", transform: "translateY(0)" }
         },
-        "lips-move": {
-          "0%, 100%": { height: "1px", width: "14%" },
-          "25%": { height: "3px", width: "12%" },
-          "50%": { height: "2px", width: "13%" },
-          "75%": { height: "4px", width: "11%" }
+        "wave": {
+          "0%, 100%": { height: "8px" },
+          "50%": { height: "16px" }
+        },
+        "blink": {
+          "0%, 100%": { opacity: "0.3", height: "3px" },
+          "50%": { opacity: "1", height: "10px" }
+        },
+        "subtle-pulse": {
+          "0%, 100%": { transform: "scale(1)" },
+          "50%": { transform: "scale(1.01)" }
+        },
+        "mouth-move": {
+          "0%": { height: "1px", width: "14%" },
+          "25%": { height: "5px", width: "12%" },
+          "50%": { height: "3px", width: "13%" },
+          "75%": { height: "4px", width: "12.5%" },
+          "100%": { height: "1px", width: "14%" }
         }
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "subtle-pulse": "subtle-pulse 4s ease-in-out infinite",
         "wave": "wave 1s ease-in-out infinite",
-        "blink": "blink 0.2s ease-in-out",
-        "fade-in": "fade-in 0.3s ease-out",
-        "lips-move": "lips-move 0.5s ease-in-out infinite",
+        "blink": "blink 1.5s ease-in-out infinite",
+        "fade-in": "fade-in 0.5s ease-out",
+        "subtle-pulse": "subtle-pulse 3s ease-in-out infinite",
+        "mouth-move": "mouth-move 0.5s ease-in-out infinite"
       },
     },
   },
-  plugins: [animatePlugin],
-} satisfies Config;
+  plugins: [require("tailwindcss-animate")],
+};
 
 export default config;
