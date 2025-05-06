@@ -1,25 +1,20 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import SoundWave from "@/components/SoundWave";
 import CallButton from "@/components/CallButton";
+import AudioPlayer from "@/components/AudioPlayer";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const AICallDemo = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [conversationText, setConversationText] = useState("مرحباً، أنا سلمى. يمكنني مساعدتك اليوم؟");
+  const [audioSource, setAudioSource] = useState<string | undefined>();
+  const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
 
-  // Toggle speaking state for demo purposes
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setIsSpeaking((prev) => !prev);
-    }, 5000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  // Example responses for the demo
+  // المحادثات النموذجية
   const demoResponses = [
     "مرحباً، أنا سلمى. يمكنني مساعدتك اليوم؟",
     "يمكنك الاستعلام عن حالة المعاش من خلال رقم البطاقة على الموقع الرسمي",
@@ -27,16 +22,59 @@ const AICallDemo = () => {
     "يمكنني مساعدتك في الإجابة على استفساراتك حول خدمات وزارة التضامن الاجتماعي"
   ];
 
-  // Cycle through demo responses for demonstration
+  // دالة لتحويل النص إلى كلام باستخدام Eleven Labs
+  const speakText = useCallback(async (text: string) => {
+    if (!text || isProcessing) return;
+    
+    setIsProcessing(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke("text-to-speech", {
+        body: { text },
+      });
+      
+      if (error) throw error;
+      
+      if (data && data.audio) {
+        setIsSpeaking(true);
+        // تحويل Base64 إلى مصدر صوتي
+        const audioDataUrl = `data:audio/mp3;base64,${data.audio}`;
+        setAudioSource(audioDataUrl);
+      }
+    } catch (error) {
+      console.error("خطأ في تحويل النص إلى كلام:", error);
+      toast({
+        title: "حدث خطأ",
+        description: "لم نتمكن من تشغيل الصوت، يرجى المحاولة مرة أخرى",
+        duration: 3000,
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [isProcessing, toast]);
+
+  // عند انتهاء الصوت
+  const handleAudioEnded = () => {
+    setIsSpeaking(false);
+  };
+
+  // تبديل الحالة عند كل استجابة جديدة
   useEffect(() => {
     let currentIndex = 0;
     const textInterval = setInterval(() => {
       currentIndex = (currentIndex + 1) % demoResponses.length;
-      setConversationText(demoResponses[currentIndex]);
-    }, 10000);
+      const newText = demoResponses[currentIndex];
+      setConversationText(newText);
+      
+      // تحويل النص الجديد إلى كلام
+      speakText(newText);
+    }, 20000); // زيادة الفترة بين الرسائل لإتاحة وقت أطول للتحدث
+
+    // تحويل النص الأول إلى كلام عند التحميل
+    speakText(demoResponses[0]);
 
     return () => clearInterval(textInterval);
-  }, []);
+  }, [speakText]);
 
   const handleMuteClick = () => {
     setIsMuted(!isMuted);
@@ -52,7 +90,7 @@ const AICallDemo = () => {
       description: "شكراً لاستخدامك خدمة سلمى المساعد الذكي",
       duration: 3000,
     });
-    // In a real application, this would navigate away or reset the call state
+    // في التطبيق الحقيقي، هذا سينتقل بعيدًا أو يعيد تعيين حالة المكالمة
   };
 
   const handleVolumeClick = () => {
@@ -65,7 +103,7 @@ const AICallDemo = () => {
 
   return (
     <div className="flex flex-col items-center min-h-screen bg-ministry-light">
-      {/* Ministry Logo */}
+      {/* شعار الوزارة */}
       <div className="w-full flex justify-between items-start p-4">
         <div className="flex items-center space-x-2 rtl:space-x-reverse">
           <img 
@@ -80,9 +118,9 @@ const AICallDemo = () => {
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* المحتوى الرئيسي */}
       <div className="flex-1 flex flex-col items-center justify-center w-full max-w-2xl mx-auto p-4">
-        {/* AI Avatar */}
+        {/* صورة المساعد الافتراضي */}
         <div className="relative w-full">
           <div className="aspect-[9/16] max-h-[60vh] overflow-hidden rounded-lg bg-black shadow-xl">
             <img 
@@ -92,7 +130,7 @@ const AICallDemo = () => {
             />
           </div>
 
-          {/* AI Speech Text */}
+          {/* نص كلام المساعد الافتراضي */}
           <div className="absolute bottom-24 left-0 right-0 mx-auto w-[80%]">
             <div className="bg-ministry-dark bg-opacity-80 text-white p-4 rounded-xl animate-fade-in mb-8">
               <p className="text-xl text-right">{conversationText}</p>
@@ -100,11 +138,11 @@ const AICallDemo = () => {
           </div>
         </div>
 
-        {/* Sound Wave Visualizer */}
+        {/* مرئيات موجة الصوت */}
         <div className="w-full max-w-md bg-ministry-dark rounded-lg p-4 mt-6">
           <SoundWave isActive={isSpeaking} className="h-12 mb-4" />
 
-          {/* Call Controls */}
+          {/* أزرار التحكم بالمكالمة */}
           <div className="flex items-center justify-center space-x-4 rtl:space-x-reverse">
             <CallButton 
               type="mute" 
@@ -124,12 +162,19 @@ const AICallDemo = () => {
         </div>
       </div>
 
-      {/* Footer */}
+      {/* تذييل */}
       <div className="w-full text-center py-4">
         <p className="text-gray-600 text-sm">
           سلمى - الموظفة الذكية من وزارة التضامن © 2025
         </p>
       </div>
+
+      {/* مشغل الصوت (مخفي) */}
+      <AudioPlayer 
+        audioSource={audioSource} 
+        autoPlay={!isMuted} 
+        onEnded={handleAudioEnded}
+      />
     </div>
   );
 };
