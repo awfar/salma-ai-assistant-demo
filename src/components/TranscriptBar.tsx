@@ -19,10 +19,10 @@ const TranscriptBar: React.FC<TranscriptBarProps> = ({
     if (text && isActive) {
       setIsVisible(true);
       
-      // إخفاء النص تلقائيًا بعد 5 ثوانٍ
+      // إخفاء النص تلقائيًا بعد انتهاء التحدث بثانية أو ثانيتين
       const timer = setTimeout(() => {
         setIsVisible(false);
-      }, 5000);
+      }, 2000);
       
       return () => clearTimeout(timer);
     } else {

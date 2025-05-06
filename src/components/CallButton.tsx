@@ -27,7 +27,7 @@ const CallButton = ({ type, onClick, active = false, className }: CallButtonProp
   const getIcon = () => {
     switch (type) {
       case "mute":
-        return active ? <Mic className="h-6 w-6" /> : <MicOff className="h-6 w-6" />;
+        return active ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />;
       case "end_call":
         return <PhoneOff className="h-6 w-6" />;
       case "volume":
@@ -42,7 +42,7 @@ const CallButton = ({ type, onClick, active = false, className }: CallButtonProp
   const getTooltip = () => {
     switch (type) {
       case "mute":
-        return active ? "تشغيل الميكروفون" : "كتم الصوت";
+        return active ? "كتم الصوت" : "تشغيل الميكروفون";
       case "end_call":
         return "إنهاء المكالمة";
       case "volume":

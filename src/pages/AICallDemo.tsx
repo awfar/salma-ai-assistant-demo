@@ -7,7 +7,7 @@ import AudioPlayer from "@/components/AudioPlayer";
 import CallTimer from "@/components/CallTimer";
 import { useToast } from "@/hooks/use-toast";
 import AvatarAnimation from "@/components/AvatarAnimation";
-import { Settings } from "lucide-react";
+import { Settings, Volume2, Volume } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useAIAssistant } from "@/hooks/useAIAssistant";
@@ -31,6 +31,7 @@ const AICallDemo = () => {
   const [callStartTime, setCallStartTime] = useState<Date>(new Date());
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentTranscript, setCurrentTranscript] = useState("");
+  const [isSpeakerOn, setIsSpeakerOn] = useState(true); // إضافة حالة لمكبر الصوت
   const { toast } = useToast();
   
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -56,7 +57,8 @@ const AICallDemo = () => {
     startListening,
     stopListening,
     transcript,
-    isProcessing: isTranscribing
+    isProcessing: isTranscribing,
+    error: speechError
   } = useSpeechRecognition({
     onResult: handleTranscriptResult
   });
@@ -131,28 +133,42 @@ const AICallDemo = () => {
 
   // بدء المكالمة مع الترحيب الأولي
   const handleStartCallClick = async () => {
-    setCallActive(true);
-    setCallStartTime(new Date());
-    
-    toast({
-      title: "بدء المكالمة",
-      description: "تم الاتصال بالمساعد الذكي سلمى",
-      duration: 2000,
-    });
-    
-    // تشغيل الرسالة الترحيبية بعد فترة قصيرة
-    setTimeout(async () => {
-      const welcomeMessage = "مرحباً، أنا سلمى من وزارة التضامن الاجتماعي. كيف يمكنني مساعدتك اليوم؟";
-      addMessage(welcomeMessage, "assistant");
+    // طلب إذن الميكروفون قبل بدء المكالمة
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
       
-      // تحويل النص إلى صوت
-      const audioUrl = await textToSpeech(welcomeMessage);
-      if (audioUrl && callActive && !isMuted) {
-        setIsSpeaking(true);
-        setAudioSource(audioUrl);
-        firstMessagePlayed.current = true;
-      }
-    }, 500);
+      setCallActive(true);
+      setCallStartTime(new Date());
+      
+      toast({
+        title: "بدء المكالمة",
+        description: "تم الاتصال بالمساعد الذكي سلمى",
+        duration: 2000,
+      });
+      
+      // تشغيل الرسالة الترحيبية بعد فترة قصيرة
+      setTimeout(async () => {
+        const welcomeMessage = "مرحباً، أنا سلمى من وزارة التضامن الاجتماعي. كيف يمكنني مساعدتك اليوم؟";
+        addMessage(welcomeMessage, "assistant");
+        
+        // تحويل النص إلى صوت
+        const audioUrl = await textToSpeech(welcomeMessage);
+        if (audioUrl && callActive && !isMuted) {
+          setIsSpeaking(true);
+          setAudioSource(audioUrl);
+          firstMessagePlayed.current = true;
+        }
+      }, 500);
+      
+    } catch (err) {
+      console.error("خطأ في الوصول إلى الميكروفون:", err);
+      toast({
+        title: "خطأ في الوصول إلى الميكروفون",
+        description: "يرجى السماح بالوصول إلى الميكروفون لاستخدام المساعد الذكي",
+        variant: "destructive",
+        duration: 5000,
+      });
+    }
   };
 
   // عند انتهاء الصوت، ابدأ الاستماع تلقائيًا
@@ -207,6 +223,12 @@ const AICallDemo = () => {
   // معالجة النقر على زر كتم الصوت
   const handleMuteClick = () => {
     setIsMuted(!isMuted);
+    
+    // إذا تم الكتم، إيقاف الصوت الحالي
+    if (!isMuted) {
+      stopCurrentAudio();
+    }
+    
     toast({
       title: isMuted ? "تم تشغيل الميكروفون" : "تم كتم الميكروفون",
       duration: 2000,
@@ -218,6 +240,17 @@ const AICallDemo = () => {
         startListening();
       }, 300);
     }
+  };
+
+  // معالجة النقر على زر مكبر الصوت
+  const handleSpeakerClick = () => {
+    setIsSpeakerOn(!isSpeakerOn);
+    toast({
+      title: isSpeakerOn ? "تم تشغيل مكبر الصوت" : "تم إيقاف مكبر الصوت",
+      duration: 2000,
+    });
+    
+    // هنا يمكن إضافة منطق للتحكم في مستوى الصوت إذا لزم الأمر
   };
 
   // إنهاء المكالمة
@@ -244,6 +277,16 @@ const AICallDemo = () => {
   const setupAudioController = useCallback((controller: { pause: () => void, isPlaying: boolean } | null) => {
     audioControllerRef.current = controller;
   }, []);
+
+  // إعادة المحاولة عند وجود خطأ في التعرف على الصوت
+  useEffect(() => {
+    if (speechError && callActive && !isSpeaking && !isListening && !isTranscribing) {
+      console.log("محاولة إعادة تشغيل الميكروفون بعد الخطأ:", speechError);
+      setTimeout(() => {
+        startListening();
+      }, 1000);
+    }
+  }, [speechError, callActive, isSpeaking, isListening, isTranscribing, startListening]);
 
   return (
     <div className="flex flex-col min-h-screen bg-ministry-light">
@@ -302,24 +345,20 @@ const AICallDemo = () => {
               </div>
             </div>
           ) : (
-            // شاشة المكالمة النشطة
+            // شاشة المكالمة النشطة - بتصميم مشابه لمكالمات iPhone
             <div className="relative w-full max-w-md mx-auto aspect-[9/16] md:aspect-auto md:h-[80vh] overflow-hidden rounded-2xl md:rounded-3xl bg-black shadow-xl border-8 border-gray-800 flex flex-col">
-              {/* خلفية المكالمة */}
-              <div className="absolute inset-0 bg-gradient-to-b from-ministry-dark/90 to-ministry-dark/70"></div>
+              {/* خلفية المكالمة - تحديثها لتكون أكثر شبهاً بمكالمة iPhone */}
+              <div className="absolute inset-0 bg-gradient-to-b from-ministry-dark to-black/90"></div>
               
-              {/* شريط الحالة أعلى الشاشة */}
-              <div className="absolute top-0 left-0 right-0 h-8 bg-black/30 backdrop-blur-lg flex items-center justify-between px-4 z-10">
-                <CallTimer isActive={callActive} startTime={callStartTime} />
-                <div className="flex items-center gap-1">
-                  <div className="h-3 w-3 rounded-full bg-green-500"></div>
-                  <div className="text-white text-xs">مٌتصل</div>
-                </div>
+              {/* شريط الحالة أعلى الشاشة - نمط iPhone */}
+              <div className="absolute top-0 left-0 right-0 h-12 bg-black/30 backdrop-blur-lg flex items-center justify-center z-10">
+                <CallTimer isActive={callActive} startTime={callStartTime} className="text-white font-bold" />
               </div>
               
-              {/* منطقة المحادثة - نستخدم منطقة أقل للعرض لإفساح مجال للشاشة */}
+              {/* منطقة المحادثة - مخفية في واجهة المكالمة، تستخدم فقط للتتبع الداخلي */}
               <div 
                 ref={chatContainerRef}
-                className="flex-1 overflow-y-auto pt-10 pb-32 px-4 z-10 flex flex-col"
+                className="opacity-0 absolute inset-0 overflow-y-auto"
               >
                 {messages.map((message) => (
                   <ChatBubble
@@ -328,45 +367,18 @@ const AICallDemo = () => {
                     sender={message.sender}
                   />
                 ))}
-                
-                {/* مؤشرات الحالة */}
-                {isAIThinking && (
-                  <div className="bg-ministry-dark/50 w-[85%] max-w-xs backdrop-blur-sm p-2 rounded-lg mx-auto mb-4">
-                    <div className="flex justify-center items-center gap-2">
-                      <div className="text-white text-xs">جاري التفكير</div>
-                      <div className="flex space-x-1 rtl:space-x-reverse">
-                        {Array.from({ length: 3 }).map((_, i) => (
-                          <div 
-                            key={i} 
-                            className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse"
-                            style={{ animationDelay: `${i * 200}ms` }}
-                          ></div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {isTranscribing && (
-                  <div className="bg-ministry-dark/50 w-[85%] max-w-xs backdrop-blur-sm p-2 rounded-lg mx-auto mb-4">
-                    <div className="flex justify-center items-center gap-2">
-                      <div className="text-white text-xs">جاري معالجة الصوت</div>
-                      <SoundWave isActive={true} type="listening" className="h-4 w-16" />
-                    </div>
-                  </div>
-                )}
               </div>
               
-              {/* الشخصية المتحركة */}
-              <div className="absolute top-16 inset-x-0 h-[40%] flex items-start justify-center pointer-events-none">
+              {/* الشخصية المتحركة - محاذاة مركز الشاشة */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
                 <AvatarAnimation 
                   isActive={isSpeaking} 
                   isListening={!isSpeaking && isListening && callActive} 
                 />
               </div>
               
-              {/* شريط النص الحالي (Transcript) */}
-              <div className="absolute bottom-36 left-0 right-0 z-20 px-4">
+              {/* شريط النص الحالي (Transcript) - تحت الذقن مباشرة */}
+              <div className="absolute bottom-32 left-0 right-0 z-20 px-4">
                 <TranscriptBar 
                   text={currentTranscript} 
                   isActive={isSpeaking || isListening} 
@@ -374,23 +386,58 @@ const AICallDemo = () => {
               </div>
               
               {/* شريط الأسئلة المقترحة */}
-              <div className="absolute bottom-24 left-0 right-0 z-20 px-2">
+              <div className="absolute bottom-20 left-0 right-0 z-20 px-2">
                 <SuggestedQuestions 
                   questions={suggestedQuestions} 
                   onQuestionSelect={handleQuestionSelect} 
                 />
               </div>
               
-              {/* مؤشرات الصوت */}
-              {isSpeaking && (
-                <div className="absolute bottom-24 left-0 right-0 mx-auto w-[80%] z-10">
-                  <SoundWave isActive={isSpeaking} className="h-6 bg-ministry-dark/30 rounded-lg p-1 backdrop-blur-sm" />
+              {/* مؤشرات الحالة */}
+              {isAIThinking && (
+                <div className="absolute bottom-40 left-0 right-0 z-10 flex justify-center">
+                  <div className="bg-ministry-dark/50 backdrop-blur-sm px-4 py-2 rounded-full flex items-center gap-2">
+                    <div className="text-white text-xs">جاري التفكير</div>
+                    <div className="flex space-x-1 rtl:space-x-reverse">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <div 
+                          key={i} 
+                          className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse"
+                          style={{ animationDelay: `${i * 200}ms` }}
+                        ></div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
               
-              {/* أزرار التحكم بالمكالمة */}
-              <div className="absolute bottom-4 left-0 right-0">
-                <div className="flex items-center justify-center space-x-4 rtl:space-x-reverse">
+              {isTranscribing && (
+                <div className="absolute bottom-40 left-0 right-0 z-10 flex justify-center">
+                  <div className="bg-ministry-dark/50 backdrop-blur-sm px-4 py-2 rounded-full flex items-center gap-2">
+                    <div className="text-white text-xs">جاري معالجة الصوت</div>
+                    <SoundWave isActive={true} type="listening" className="h-4 w-16" />
+                  </div>
+                </div>
+              )}
+              
+              {isListening && (
+                <div className="absolute top-16 right-4 flex items-center gap-2 animate-pulse">
+                  <div className="flex space-x-1 rtl:space-x-reverse">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div 
+                        key={i} 
+                        className="w-2 h-2 bg-green-500 rounded-full animate-pulse"
+                        style={{ animationDelay: `${i * 200}ms` }}
+                      ></div>
+                    ))}
+                  </div>
+                  <span className="text-xs text-white bg-green-500/80 px-2 py-0.5 rounded-full">جاري الاستماع</span>
+                </div>
+              )}
+              
+              {/* أزرار التحكم بالمكالمة - نمط iOS */}
+              <div className="absolute bottom-4 left-0 right-0 z-30">
+                <div className="flex items-center justify-center space-x-5 rtl:space-x-reverse">
                   <CallButton 
                     type="mute" 
                     onClick={handleMuteClick} 
@@ -401,6 +448,25 @@ const AICallDemo = () => {
                     onClick={handleEndCallClick} 
                     className="p-5" 
                   />
+                  {/* إضافة زر التحكم في الصوت */}
+                  <button
+                    className={`relative flex items-center justify-center rounded-full p-4 text-white transition-all transform hover:scale-105 active:scale-95
+                      ${isSpeakerOn ? 'bg-ministry-green shadow-lg shadow-green-500/30' : 'bg-gray-800 hover:bg-gray-700 shadow-md'}`}
+                    onClick={handleSpeakerClick}
+                    title={isSpeakerOn ? "إيقاف مكبر الصوت" : "تشغيل مكبر الصوت"}
+                  >
+                    {isSpeakerOn ? (
+                      <Volume2 className="h-6 w-6" />
+                    ) : (
+                      <Volume className="h-6 w-6" />
+                    )}
+                    <span className="sr-only">{isSpeakerOn ? "إيقاف مكبر الصوت" : "تشغيل مكبر الصوت"}</span>
+                    
+                    {/* تأثير نبض عند التفعيل */}
+                    {isSpeakerOn && (
+                      <span className="absolute inset-0 rounded-full bg-ministry-green animate-ping opacity-25"></span>
+                    )}
+                  </button>
                 </div>
               </div>
             </div>

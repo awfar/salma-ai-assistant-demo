@@ -17,9 +17,8 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [playAttempts, setPlayAttempts] = useState(0);
-    const maxPlayAttempts = 3;
+    const maxPlayAttempts = 5; // زيادة عدد المحاولات
 
-    // إتاحة التحكم في تشغيل الصوت من الخارج
     useImperativeHandle(ref, () => ({
       pause: () => {
         if (audioRef.current) {
@@ -31,15 +30,16 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       isPlaying
     }));
 
+    // تحميل الصوت عندما يتغير المصدر
     useEffect(() => {
       if (audioSource && audioRef.current) {
         try {
-          console.log("🔊 تحميل مصدر صوتي جديد");
+          console.log("🔊 تحميل مصدر صوتي جديد:", audioSource.substring(0, 50) + "...");
           audioRef.current.src = audioSource;
           setPlayAttempts(0);
 
           if (autoPlay) {
-            playAudio();
+            setTimeout(() => playAudio(), 100); // تأخير قصير للتأكد من تحميل الصوت
           }
         } catch (e) {
           console.error("❌ خطأ في تعيين مصدر الصوت:", e);
@@ -51,7 +51,9 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
 
     // محاولة تشغيل الصوت مع إعادة المحاولة عند الفشل
     const playAudio = () => {
-      if (!audioRef.current) return;
+      if (!audioRef.current || !audioSource) return;
+
+      console.log("🎵 محاولة تشغيل الصوت...");
 
       const playPromise = audioRef.current.play();
       if (playPromise !== undefined) {
@@ -63,15 +65,16 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
           })
           .catch((e) => {
             console.error("❌ خطأ في تشغيل الصوت:", e);
-            setIsPlaying(false);
             
             // إعادة المحاولة إذا كان ذلك ممكنًا
             if (playAttempts < maxPlayAttempts) {
               console.log(`⚠️ محاولة تشغيل الصوت ${playAttempts + 1}/${maxPlayAttempts}`);
               setPlayAttempts(prev => prev + 1);
-              setTimeout(playAudio, 300);
+              // زيادة الفترة الزمنية بين المحاولات
+              setTimeout(playAudio, 500 * (playAttempts + 1));
             } else {
               console.error("❌ فشل تشغيل الصوت بعد عدة محاولات");
+              setIsPlaying(false);
               if (onEnded) onEnded();
             }
           });
@@ -97,7 +100,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       if (onEnded) onEnded();
     };
 
-    // معالجة الأخطاء - تصحيح نوع البيانات للمتغير e
+    // معالجة الأخطاء
     const handleError = (e: React.SyntheticEvent<HTMLAudioElement>) => {
       console.error("❌ حدث خطأ أثناء تشغيل الصوت:", e);
       setIsPlaying(false);
