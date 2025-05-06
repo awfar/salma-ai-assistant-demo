@@ -83,10 +83,25 @@ const config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "subtle-pulse": {
+          "0%, 100%": { transform: "scale(1)" },
+          "50%": { transform: "scale(1.01)" },
+        },
+        "wave": {
+          "0%, 100%": { height: "5px" },
+          "50%": { height: "16px" },
+        },
+        "blink": {
+          "0%, 100%": { height: "4px", opacity: "1" },
+          "50%": { height: "1px", opacity: "0.2" },
+        }
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "subtle-pulse": "subtle-pulse 4s ease-in-out infinite",
+        "wave": "wave 1s ease-in-out infinite",
+        "blink": "blink 0.2s ease-in-out",
       },
     },
   },

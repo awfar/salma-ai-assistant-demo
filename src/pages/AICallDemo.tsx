@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import SoundWave from "@/components/SoundWave";
 import CallButton from "@/components/CallButton";
@@ -8,7 +8,7 @@ import CallTimer from "@/components/CallTimer";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import AvatarAnimation from "@/components/AvatarAnimation";
-import { Mic, Volume2, Settings, Phone, PhoneOff, HelpCircle } from "lucide-react";
+import { Settings, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const AICallDemo = () => {
@@ -23,7 +23,8 @@ const AICallDemo = () => {
   const { toast } = useToast();
 
   // تجنب تكرار الصوت - نستخدم مرجع لتتبع حالة التشغيل الحالية
-  const firstMessagePlayed = React.useRef(false);
+  const firstMessagePlayed = useRef(false);
+  const audioControllerRef = useRef<{ pause: () => void } | null>(null);
 
   // دالة لتحويل النص إلى كلام باستخدام Eleven Labs
   const speakText = useCallback(async (text: string) => {
@@ -34,7 +35,7 @@ const AICallDemo = () => {
     // قراءة إعدادات الصوت من localStorage إن وجدت
     const savedSettings = localStorage.getItem('aiSettings');
     const settings = savedSettings ? JSON.parse(savedSettings) : {};
-    const voiceId = settings.voiceId || "EXAVITQu4vr4xnSDxMaL"; // استخدام صوت سارة كافتراضي
+    const voiceId = settings.voiceId || "EXAVITQu4vr4xnSDxMaL"; // استخدام صوت افتراضي
     
     try {
       const { data, error } = await supabase.functions.invoke("text-to-speech", {
@@ -66,18 +67,29 @@ const AICallDemo = () => {
     setIsSpeaking(false);
   };
 
+  // إيقاف الصوت الحالي عند إنهاء المكالمة
+  const stopCurrentAudio = useCallback(() => {
+    if (audioControllerRef.current) {
+      audioControllerRef.current.pause();
+    }
+    setIsSpeaking(false);
+  }, []);
+
   // فقط قم بتشغيل الرسالة الأولى مرة واحدة عند بدء المكالمة
   useEffect(() => {
     if (callActive && !firstMessagePlayed.current) {
       firstMessagePlayed.current = true;
-      speakText("مرحباً، أنا سلمى. يمكنني مساعدتك اليوم؟");
+      setTimeout(() => {
+        speakText("مرحباً، أنا سلمى. يمكنني مساعدتك اليوم؟");
+      }, 500);
     }
     
-    // عند إنهاء المكالمة، إعادة ضبط المؤشر
+    // عند إنهاء المكالمة، إعادة ضبط المؤشر وإيقاف الصوت
     if (!callActive) {
       firstMessagePlayed.current = false;
+      stopCurrentAudio();
     }
-  }, [callActive, speakText]);
+  }, [callActive, speakText, stopCurrentAudio]);
 
   const handleMuteClick = () => {
     setIsMuted(!isMuted);
@@ -89,7 +101,7 @@ const AICallDemo = () => {
 
   const handleEndCallClick = () => {
     setCallActive(false);
-    setIsSpeaking(false);
+    stopCurrentAudio();
     toast({
       title: "تم إنهاء المكالمة",
       description: "شكراً لاستخدامك خدمة سلمى المساعد الذكي",
@@ -118,6 +130,22 @@ const AICallDemo = () => {
   const handleSettingsClick = () => {
     navigate('/ai-settings');
   };
+
+  // إعداد مرجع للتحكم في مشغل الصوت
+  const setupAudioController = useCallback((audioElement: HTMLAudioElement | null) => {
+    if (audioElement) {
+      audioControllerRef.current = {
+        pause: () => {
+          try {
+            audioElement.pause();
+            audioElement.currentTime = 0;
+          } catch (err) {
+            console.error("خطأ في إيقاف الصوت:", err);
+          }
+        }
+      };
+    }
+  }, []);
 
   return (
     <div className="flex flex-col min-h-screen bg-ministry-light">
@@ -159,11 +187,11 @@ const AICallDemo = () => {
                 انقر على زر الاتصال للتحدث مع المساعد الذكي سلمى والحصول على المساعدة في خدمات وزارة التضامن الاجتماعي
               </p>
               
-              <div className="flex justify-center mb-8">
+              <div className="flex justify-center mb-8 overflow-hidden rounded-full border-4 border-ministry-green" style={{width: '140px', height: '140px', margin: '0 auto'}}>
                 <img 
-                  src="/lovable-uploads/11c9fc05-dbe2-4818-bf45-0427f0c08e8f.png" 
+                  src="/lovable-uploads/be96669d-e3ce-4c59-9c76-568ee630f046.png" 
                   alt="سلمى المساعد الافتراضي" 
-                  className="w-32 h-32 rounded-full border-4 border-ministry-green"
+                  className="w-full h-full object-cover object-top"
                 />
               </div>
               
@@ -196,11 +224,13 @@ const AICallDemo = () => {
               </div>
 
               {/* نص كلام المساعد الافتراضي - في الأسفل وليس على الصورة */}
-              <div className="absolute bottom-24 left-0 right-0 mx-auto w-[85%] z-10">
-                <div className="bg-white/15 backdrop-blur-lg border border-white/20 text-white p-4 rounded-xl animate-fade-in mb-4">
-                  <p className="text-xl text-right">{conversationText}</p>
+              {conversationText && (
+                <div className="absolute bottom-24 left-0 right-0 mx-auto w-[85%] z-10">
+                  <div className="bg-white/15 backdrop-blur-lg border border-white/20 text-white p-4 rounded-xl animate-fade-in mb-4">
+                    <p className="text-xl text-right">{conversationText}</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* أزرار التحكم بالمكالمة */}
               <div className="absolute bottom-4 left-0 right-0">
@@ -245,6 +275,7 @@ const AICallDemo = () => {
         audioSource={audioSource} 
         autoPlay={!isMuted && callActive} 
         onEnded={handleAudioEnded}
+        ref={setupAudioController}
       />
     </div>
   );
