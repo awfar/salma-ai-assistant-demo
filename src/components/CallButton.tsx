@@ -1,7 +1,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { MicOff, CallEnd, VolumeUp } from "lucide-react";
+import { MicOff, PhoneOff, Volume } from "lucide-react";
 
 interface CallButtonProps {
   type: "mute" | "end_call" | "volume";
@@ -27,9 +27,9 @@ const CallButton = ({ type, onClick, active = false, className }: CallButtonProp
       case "mute":
         return <MicOff className="h-6 w-6" />;
       case "end_call":
-        return <CallEnd className="h-6 w-6" />;
+        return <PhoneOff className="h-6 w-6" />;
       case "volume":
-        return <VolumeUp className="h-6 w-6" />;
+        return <Volume className="h-6 w-6" />;
       default:
         return null;
     }
