@@ -99,6 +99,12 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* دعم الاتجاه من اليمين إلى اليسار */
+  .rtl {
+    direction: rtl;
+    text-align: right;
+  }
 }
 
 @keyframes fade-in {
@@ -125,6 +131,7 @@
   }
 }
 
+/* تأخير حركة الموجات */
 .animation-delay-0 {
   animation-delay: 0ms;
 }
@@ -139,4 +146,39 @@
 
 .animate-wave {
   animation: wave 1.2s ease-in-out infinite;
+}
+
+/* إضافة تأثير نبض خفيف للشخصية المتحركة */
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+.animate-subtle-pulse {
+  animation: subtle-pulse 2s ease-in-out infinite;
+}
+
+@keyframes subtle-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.015);
+  }
+}
+
+/* تأثيرات إضافية للواجهة */
+.glass-effect {
+  @apply backdrop-blur-lg bg-white/10 border border-white/20;
+}
+
+.phone-screen {
+  @apply aspect-[9/16] relative overflow-hidden rounded-3xl;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
 }

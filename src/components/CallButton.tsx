@@ -1,7 +1,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { MicOff, PhoneOff, Volume } from "lucide-react";
+import { MicOff, PhoneOff, Volume, Mic, Volume2 } from "lucide-react";
 
 interface CallButtonProps {
   type: "mute" | "end_call" | "volume";
@@ -14,22 +14,22 @@ const CallButton = ({ type, onClick, active = false, className }: CallButtonProp
   const getButtonStyle = () => {
     switch (type) {
       case "end_call":
-        return "bg-ministry-red hover:bg-red-600";
+        return "bg-ministry-red hover:bg-red-600 shadow-lg shadow-red-500/30";
       default:
         return active 
-          ? "bg-ministry-green text-white" 
-          : "bg-gray-800 hover:bg-gray-700";
+          ? "bg-ministry-green text-white shadow-lg shadow-green-500/30" 
+          : "bg-gray-800 hover:bg-gray-700 shadow-md";
     }
   };
 
   const getIcon = () => {
     switch (type) {
       case "mute":
-        return <MicOff className="h-6 w-6" />;
+        return active ? <Mic className="h-6 w-6" /> : <MicOff className="h-6 w-6" />;
       case "end_call":
         return <PhoneOff className="h-6 w-6" />;
       case "volume":
-        return <Volume className="h-6 w-6" />;
+        return <Volume2 className="h-6 w-6" />;
       default:
         return null;
     }
@@ -38,7 +38,7 @@ const CallButton = ({ type, onClick, active = false, className }: CallButtonProp
   const getTooltip = () => {
     switch (type) {
       case "mute":
-        return "كتم الصوت";
+        return active ? "تشغيل الميكروفون" : "كتم الصوت";
       case "end_call":
         return "إنهاء المكالمة";
       case "volume":
@@ -51,7 +51,7 @@ const CallButton = ({ type, onClick, active = false, className }: CallButtonProp
   return (
     <button
       className={cn(
-        "relative flex items-center justify-center rounded-full p-4 text-white transition-all",
+        "relative flex items-center justify-center rounded-full p-4 text-white transition-all transform hover:scale-105 active:scale-95",
         getButtonStyle(),
         className
       )}
@@ -59,6 +59,12 @@ const CallButton = ({ type, onClick, active = false, className }: CallButtonProp
       title={getTooltip()}
     >
       {getIcon()}
+      <span className="sr-only">{getTooltip()}</span>
+      
+      {/* تأثير نبض عند التفعيل */}
+      {active && type !== "end_call" && (
+        <span className="absolute inset-0 rounded-full bg-ministry-green animate-ping opacity-25"></span>
+      )}
     </button>
   );
 };
