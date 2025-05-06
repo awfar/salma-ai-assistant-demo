@@ -2,14 +2,13 @@
 import type { Config } from "tailwindcss";
 import { fontFamily } from "tailwindcss/defaultTheme";
 
-const config: Config = {
+const config = {
   darkMode: ["class"],
   content: [
-    "./src/**/*.{js,ts,jsx,tsx}",
-    "./pages/**/*.{js,ts,jsx,tsx}",
-    "./components/**/*.{js,ts,jsx,tsx}",
-    "./app/**/*.{js,ts,jsx,tsx}",
+    "./index.html",
+    "./src/**/*.{ts,tsx}",
   ],
+  prefix: "",
   theme: {
     container: {
       center: true,
@@ -20,13 +19,6 @@ const config: Config = {
     },
     extend: {
       colors: {
-        ministry: {
-          light: "#f3f9fa",
-          DEFAULT: "#29b0c9",
-          dark: "#112d32",
-          green: "#56c596",
-          red: "#ef476f",
-        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -60,6 +52,12 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // ألوان وزارة التضامن الاجتماعي
+        "ministry-dark": "#1a3a63", // كحلي غامق
+        "ministry-light": "#f5f7fa", // رمادي فاتح
+        "ministry-gold": "#ffd700", // ذهبي
+        "ministry-green": "#008761", // أخضر
+        "ministry-red": "#e53935", // أحمر
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -71,49 +69,50 @@ const config: Config = {
       },
       keyframes: {
         "accordion-down": {
-          from: { height: 0 },
+          from: { height: "0" },
           to: { height: "var(--radix-accordion-content-height)" },
         },
         "accordion-up": {
           from: { height: "var(--radix-accordion-content-height)" },
-          to: { height: 0 },
-        },
-        "fade-in": {
-          "0%": { opacity: "0", transform: "translateY(10px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" }
-        },
-        "wave": {
-          "0%, 100%": { height: "8px" },
-          "50%": { height: "16px" }
-        },
-        "blink": {
-          "0%, 100%": { opacity: "0.3", height: "3px" },
-          "50%": { opacity: "1", height: "10px" }
+          to: { height: "0" },
         },
         "subtle-pulse": {
           "0%, 100%": { transform: "scale(1)" },
-          "50%": { transform: "scale(1.01)" }
+          "50%": { transform: "scale(1.01)" },
         },
-        "mouth-move": {
-          "0%": { height: "1px", width: "14%" },
-          "25%": { height: "5px", width: "12%" },
-          "50%": { height: "3px", width: "13%" },
-          "75%": { height: "4px", width: "12.5%" },
-          "100%": { height: "1px", width: "14%" }
+        "wave": {
+          "0%, 100%": { height: "4px" },
+          "50%": { height: "12px" },
+        },
+        "blink": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.4" },
         }
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "wave": "wave 1s ease-in-out infinite",
-        "blink": "blink 1.5s ease-in-out infinite",
-        "fade-in": "fade-in 0.5s ease-out",
-        "subtle-pulse": "subtle-pulse 3s ease-in-out infinite",
-        "mouth-move": "mouth-move 0.5s ease-in-out infinite"
+        "subtle-pulse": "subtle-pulse 1.5s infinite ease-in-out",
+        "wave": "wave 0.8s infinite ease-in-out",
+        "blink": "blink 1.2s infinite ease-in-out",
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
-};
+  plugins: [
+    require("tailwindcss-animate"),
+    // إضافة plugin لإخفاء شريط التمرير مع الاحتفاظ بالوظيفة
+    function({ addUtilities }) {
+      addUtilities({
+        ".scrollbar-hide": {
+          "-ms-overflow-style": "none",
+          "scrollbar-width": "none",
+          "&::-webkit-scrollbar": {
+            display: "none",
+          },
+        },
+      });
+    },
+  ],
+} satisfies Config;
 
 export default config;

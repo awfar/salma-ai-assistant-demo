@@ -97,8 +97,8 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       if (onEnded) onEnded();
     };
 
-    // معالجة الأخطاء
-    const handleError = (e: Event) => {
+    // معالجة الأخطاء - تصحيح نوع البيانات للمتغير e
+    const handleError = (e: React.SyntheticEvent<HTMLAudioElement>) => {
       console.error("❌ حدث خطأ أثناء تشغيل الصوت:", e);
       setIsPlaying(false);
       if (onEnded) onEnded();

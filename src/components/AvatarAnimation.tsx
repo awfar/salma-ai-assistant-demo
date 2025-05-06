@@ -61,12 +61,12 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
     if (isActive) {
       // إنشاء نمط حركة شفاه أكثر تزامنًا مع الصوت
       const mouthPatterns = [
-        { height: 1, width: 14, opacity: 0.6 },  // مغلق
-        { height: 2, width: 13, opacity: 0.7 },  // مفتوح قليلاً
-        { height: 4, width: 12, opacity: 0.8 },  // مفتوح متوسط
-        { height: 6, width: 11, opacity: 0.9 },  // مفتوح كثيرًا
-        { height: 5, width: 11.5, opacity: 0.85 }, // متوسط
-        { height: 3, width: 12.5, opacity: 0.75 }, // قليل
+        { height: 1, width: 12, opacity: 0.6 },  // مغلق
+        { height: 2, width: 11, opacity: 0.7 },  // مفتوح قليلاً
+        { height: 4, width: 10, opacity: 0.8 },  // مفتوح متوسط
+        { height: 5, width: 9, opacity: 0.9 },  // مفتوح كثيرًا
+        { height: 4, width: 10, opacity: 0.85 }, // متوسط
+        { height: 2, width: 11, opacity: 0.75 }, // قليل
       ];
       
       let patternIndex = 0;
@@ -99,7 +99,7 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
       // فم مغلق عند عدم التحدث
       mouthRef.current.style.height = "1px";
       mouthRef.current.style.opacity = "0.6";
-      mouthRef.current.style.width = "14%";
+      mouthRef.current.style.width = "12%";
     }
     
     return () => {
@@ -107,7 +107,7 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
       if (mouthRef.current) {
         mouthRef.current.style.height = "1px";
         mouthRef.current.style.opacity = "0.6";
-        mouthRef.current.style.width = "14%";
+        mouthRef.current.style.width = "12%";
       }
     };
   }, [isActive]);
@@ -159,7 +159,7 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
     >
       <div className="relative">
         <img 
-          src="/lovable-uploads/be96669d-e3ce-4c59-9c76-568ee630f046.png" 
+          src="/lovable-uploads/498da759-9d56-403c-b889-7a34fa5734e5.png" 
           alt="سلمى المساعد الافتراضي" 
           className={cn(
             "object-cover max-h-full w-auto transition-all", 
@@ -169,8 +169,8 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
         
         {/* تمثيل الفم للمحاكاة البسيطة - تحسين لتناسب lip sync */}
         <div 
-          className="absolute bottom-[31%] left-1/2 transform -translate-x-1/2"
-          style={{ width: '14%' }}
+          className="absolute bottom-[26%] left-1/2 transform -translate-x-1/2"
+          style={{ width: '12%' }}
         >
           <div 
             ref={mouthRef}

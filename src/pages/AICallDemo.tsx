@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useAIAssistant } from "@/hooks/useAIAssistant";
 import ChatBubble from "@/components/ChatBubble";
+import TranscriptBar from "@/components/TranscriptBar";
+import SuggestedQuestions from "@/components/SuggestedQuestions";
 
 interface Message {
   id: string;
@@ -28,11 +30,22 @@ const AICallDemo = () => {
   const [callActive, setCallActive] = useState(false);
   const [callStartTime, setCallStartTime] = useState<Date>(new Date());
   const [messages, setMessages] = useState<Message[]>([]);
+  const [currentTranscript, setCurrentTranscript] = useState("");
   const { toast } = useToast();
   
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const audioControllerRef = useRef<{ pause: () => void, isPlaying: boolean } | null>(null);
   const firstMessagePlayed = useRef(false);
+  
+  // الأسئلة المقترحة
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([
+    "ما هو موعد صرف المعاش؟",
+    "ما هي شروط تكافل وكرامة؟",
+    "كيف أُحدث بياناتي؟",
+    "ما هي المستندات المطلوبة للتقديم؟",
+    "كيف يمكنني الاستعلام عن معاشي؟",
+    "أين أقرب فرع لوزارة التضامن؟"
+  ]);
 
   // الحصول على المساعد الذكي
   const { askAssistant, textToSpeech, isLoading: isAIThinking } = useAIAssistant();
@@ -58,6 +71,9 @@ const AICallDemo = () => {
     };
     
     setMessages(prevMessages => [...prevMessages, newMessage]);
+    
+    // تحديث النص الحالي في شريط الترجمة
+    setCurrentTranscript(text);
   };
 
   // معالجة نتيجة التعرف على الكلام
@@ -83,6 +99,29 @@ const AICallDemo = () => {
     }
   }
 
+  // معالجة اختيار سؤال مقترح
+  const handleQuestionSelect = async (question: string) => {
+    if (!callActive || isSpeaking || isTranscribing || isAIThinking) return;
+    
+    // إضافة السؤال كرسالة مستخدم
+    addMessage(question, "user");
+    
+    // الحصول على رد من المساعد الذكي
+    const aiResponse = await askAssistant(question);
+    
+    if (aiResponse) {
+      // إضافة رد المساعد
+      addMessage(aiResponse, "assistant");
+      
+      // تحويل النص إلى كلام
+      const audioUrl = await textToSpeech(aiResponse);
+      if (audioUrl && callActive && !isMuted) {
+        setIsSpeaking(true);
+        setAudioSource(audioUrl);
+      }
+    }
+  };
+
   // تحريك لأسفل عند إضافة رسائل جديدة
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -103,7 +142,7 @@ const AICallDemo = () => {
     
     // تشغيل الرسالة الترحيبية بعد فترة قصيرة
     setTimeout(async () => {
-      const welcomeMessage = "مرحباً، أنا سلمى. كيف يمكنني مساعدتك اليوم؟";
+      const welcomeMessage = "مرحباً، أنا سلمى من وزارة التضامن الاجتماعي. كيف يمكنني مساعدتك اليوم؟";
       addMessage(welcomeMessage, "assistant");
       
       // تحويل النص إلى صوت
@@ -119,6 +158,7 @@ const AICallDemo = () => {
   // عند انتهاء الصوت، ابدأ الاستماع تلقائيًا
   const handleAudioEnded = useCallback(() => {
     setIsSpeaking(false);
+    setCurrentTranscript(""); // إزالة النص من شريط الترجمة
     
     if (callActive && !isMuted && firstMessagePlayed.current) {
       // تأخير قصير قبل بدء الاستماع
@@ -153,6 +193,7 @@ const AICallDemo = () => {
     if (!callActive) {
       firstMessagePlayed.current = false;
       setMessages([]);
+      setCurrentTranscript("");
     }
   }, [callActive]);
 
@@ -246,7 +287,7 @@ const AICallDemo = () => {
               
               <div className="flex justify-center mb-8 overflow-hidden rounded-full border-4 border-ministry-green" style={{width: '140px', height: '140px', margin: '0 auto'}}>
                 <img 
-                  src="/lovable-uploads/be96669d-e3ce-4c59-9c76-568ee630f046.png" 
+                  src="/lovable-uploads/498da759-9d56-403c-b889-7a34fa5734e5.png" 
                   alt="سلمى المساعد الافتراضي" 
                   className="w-full h-full object-cover object-top"
                 />
@@ -262,7 +303,7 @@ const AICallDemo = () => {
             </div>
           ) : (
             // شاشة المكالمة النشطة
-            <div className="relative w-full max-w-md mx-auto aspect-[9/16] md:aspect-auto md:max-h-[80vh] overflow-hidden rounded-2xl md:rounded-3xl bg-black shadow-xl border-8 border-gray-800 flex flex-col">
+            <div className="relative w-full max-w-md mx-auto aspect-[9/16] md:aspect-auto md:h-[80vh] overflow-hidden rounded-2xl md:rounded-3xl bg-black shadow-xl border-8 border-gray-800 flex flex-col">
               {/* خلفية المكالمة */}
               <div className="absolute inset-0 bg-gradient-to-b from-ministry-dark/90 to-ministry-dark/70"></div>
               
@@ -275,10 +316,10 @@ const AICallDemo = () => {
                 </div>
               </div>
               
-              {/* منطقة المحادثة */}
+              {/* منطقة المحادثة - نستخدم منطقة أقل للعرض لإفساح مجال للشاشة */}
               <div 
                 ref={chatContainerRef}
-                className="flex-1 overflow-y-auto pt-10 pb-24 px-4 z-10 flex flex-col"
+                className="flex-1 overflow-y-auto pt-10 pb-32 px-4 z-10 flex flex-col"
               >
                 {messages.map((message) => (
                   <ChatBubble
@@ -324,9 +365,25 @@ const AICallDemo = () => {
                 />
               </div>
               
+              {/* شريط النص الحالي (Transcript) */}
+              <div className="absolute bottom-36 left-0 right-0 z-20 px-4">
+                <TranscriptBar 
+                  text={currentTranscript} 
+                  isActive={isSpeaking || isListening} 
+                />
+              </div>
+              
+              {/* شريط الأسئلة المقترحة */}
+              <div className="absolute bottom-24 left-0 right-0 z-20 px-2">
+                <SuggestedQuestions 
+                  questions={suggestedQuestions} 
+                  onQuestionSelect={handleQuestionSelect} 
+                />
+              </div>
+              
               {/* مؤشرات الصوت */}
               {isSpeaking && (
-                <div className="absolute bottom-24 left-0 right-0 mx-auto w-[80%]">
+                <div className="absolute bottom-24 left-0 right-0 mx-auto w-[80%] z-10">
                   <SoundWave isActive={isSpeaking} className="h-6 bg-ministry-dark/30 rounded-lg p-1 backdrop-blur-sm" />
                 </div>
               )}
