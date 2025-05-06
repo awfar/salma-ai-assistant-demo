@@ -94,6 +94,16 @@ const config = {
         "blink": {
           "0%, 100%": { height: "4px", opacity: "1" },
           "50%": { height: "1px", opacity: "0.2" },
+        },
+        "fade-in": {
+          "0%": { opacity: "0", transform: "translateY(10px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "lips-move": {
+          "0%, 100%": { height: "1px", width: "14%" },
+          "25%": { height: "3px", width: "12%" },
+          "50%": { height: "2px", width: "13%" },
+          "75%": { height: "4px", width: "11%" }
         }
       },
       animation: {
@@ -102,6 +112,8 @@ const config = {
         "subtle-pulse": "subtle-pulse 4s ease-in-out infinite",
         "wave": "wave 1s ease-in-out infinite",
         "blink": "blink 0.2s ease-in-out",
+        "fade-in": "fade-in 0.3s ease-out",
+        "lips-move": "lips-move 0.5s ease-in-out infinite",
       },
     },
   },

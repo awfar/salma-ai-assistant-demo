@@ -53,30 +53,34 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
     };
   }, [isActive]);
 
-  // حركة الفم عند التحدث
+  // حركة الفم عند التحدث محسنة
   useEffect(() => {
     if (!mouthRef.current) return;
     
     let animationFrame: number;
     if (isActive) {
-      let openness = 0;
-      let increasing = true;
+      // إنشاء تأثير حركة شفاه أكثر طبيعية
+      const mouthPatterns = [0, 1, 2, 3, 2, 1, 0, 2, 3, 2, 1, 0]; // أنماط مختلفة للحركة
+      let patternIndex = 0;
       
       const animateMouth = () => {
-        if (increasing) {
-          openness += 0.3;
-          if (openness >= 3) increasing = false;
-        } else {
-          openness -= 0.3;
-          if (openness <= 0) increasing = true;
-        }
-        
         if (mouthRef.current) {
+          // تحديث شكل الفم بناءً على النمط الحالي
+          const openness = mouthPatterns[patternIndex % mouthPatterns.length];
+          
           mouthRef.current.style.height = `${Math.max(1, openness)}px`;
           mouthRef.current.style.opacity = `${0.6 + (openness / 10)}`;
+          mouthRef.current.style.width = `${14 - (openness * 0.5)}%`; // تغيير عرض الفم
+          
+          // التحرك للنمط التالي
+          patternIndex++;
+          
+          // سرعة متغيرة للتحرك بين الأنماط
+          const speed = Math.random() * 100 + 80; // بين 80 و180 مللي ثانية
+          setTimeout(() => {
+            animationFrame = requestAnimationFrame(animateMouth);
+          }, speed);
         }
-        
-        animationFrame = requestAnimationFrame(animateMouth);
       };
       
       animationFrame = requestAnimationFrame(animateMouth);
@@ -84,6 +88,7 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
       // فم مغلق عند عدم التحدث
       mouthRef.current.style.height = "1px";
       mouthRef.current.style.opacity = "0.6";
+      mouthRef.current.style.width = "14%";
     }
     
     return () => {
@@ -91,6 +96,7 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
       if (mouthRef.current) {
         mouthRef.current.style.height = "1px";
         mouthRef.current.style.opacity = "0.6";
+        mouthRef.current.style.width = "14%";
       }
     };
   }, [isActive]);
@@ -150,7 +156,7 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
           )}
         />
         
-        {/* تمثيل الفم للمحاكاة البسيطة */}
+        {/* تمثيل الفم للمحاكاة البسيطة - تحسين لتناسب lip sync */}
         <div 
           className="absolute bottom-[31%] left-1/2 transform -translate-x-1/2"
           style={{ width: '14%' }}
@@ -177,10 +183,18 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
         </div>
       </div>
       
-      {/* حالة الاستماع */}
+      {/* حالة الاستماع - محسنة */}
       {isListening && (
         <div className="absolute top-8 right-8 flex items-center gap-2">
-          <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+          <div className="flex space-x-1 rtl:space-x-reverse">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div 
+                key={i} 
+                className="w-2 h-2 bg-green-500 rounded-full animate-pulse"
+                style={{ animationDelay: `${i * 200}ms` }}
+              ></div>
+            ))}
+          </div>
           <span className="text-xs text-white bg-green-500/80 px-2 py-0.5 rounded-full">جاري الاستماع</span>
         </div>
       )}
