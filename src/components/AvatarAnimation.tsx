@@ -4,11 +4,17 @@ import { cn } from "@/lib/utils";
 
 interface AvatarAnimationProps {
   isActive?: boolean;
+  isListening?: boolean;
   className?: string;
 }
 
-const AvatarAnimation: React.FC<AvatarAnimationProps> = ({ isActive = false, className }) => {
+const AvatarAnimation: React.FC<AvatarAnimationProps> = ({ 
+  isActive = false, 
+  isListening = false,
+  className 
+}) => {
   const avatarRef = useRef<HTMLDivElement>(null);
+  const mouthRef = useRef<HTMLDivElement>(null);
 
   // إضافة حركة بسيطة عند التحدث
   useEffect(() => {
@@ -46,6 +52,45 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({ isActive = false, cla
     };
   }, [isActive]);
 
+  // حركة الفم عند التحدث
+  useEffect(() => {
+    if (!mouthRef.current) return;
+    
+    let animationFrame: number;
+    if (isActive) {
+      let openness = 0;
+      let increasing = true;
+      
+      const animateMouth = () => {
+        if (increasing) {
+          openness += 0.5;
+          if (openness >= 8) increasing = false;
+        } else {
+          openness -= 0.5;
+          if (openness <= 0) increasing = true;
+        }
+        
+        if (mouthRef.current) {
+          mouthRef.current.style.height = `${Math.max(1, openness)}px`;
+        }
+        
+        animationFrame = requestAnimationFrame(animateMouth);
+      };
+      
+      animationFrame = requestAnimationFrame(animateMouth);
+    } else {
+      // فم مغلق عند عدم التحدث
+      mouthRef.current.style.height = "1px";
+    }
+    
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      if (mouthRef.current) {
+        mouthRef.current.style.height = "1px";
+      }
+    };
+  }, [isActive]);
+
   return (
     <div 
       ref={avatarRef} 
@@ -54,14 +99,34 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({ isActive = false, cla
         className
       )}
     >
-      <img 
-        src="/lovable-uploads/11c9fc05-dbe2-4818-bf45-0427f0c08e8f.png" 
-        alt="سلمى المساعد الافتراضي" 
-        className={cn(
-          "object-cover max-h-full w-auto transition-all", 
-          isActive ? "animate-subtle-pulse" : ""
-        )}
-      />
+      <div className="relative">
+        <img 
+          src="/lovable-uploads/11c9fc05-dbe2-4818-bf45-0427f0c08e8f.png" 
+          alt="سلمى المساعد الافتراضي" 
+          className={cn(
+            "object-cover max-h-full w-auto transition-all", 
+            isActive ? "animate-subtle-pulse" : ""
+          )}
+        />
+        
+        {/* تمثيل الفم للمحاكاة البسيطة */}
+        <div 
+          className="absolute bottom-[28%] left-1/2 transform -translate-x-1/2"
+          style={{ width: '20%' }}
+        >
+          <div 
+            ref={mouthRef}
+            className="bg-black/60 rounded-full w-full h-1 transition-all"
+          ></div>
+        </div>
+      </div>
+      
+      {/* حالة الاستماع */}
+      {isListening && (
+        <div className="absolute top-8 right-8">
+          <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+        </div>
+      )}
       
       {/* إضافة تأثير للإشارة بأن المساعد يتحدث */}
       {isActive && (

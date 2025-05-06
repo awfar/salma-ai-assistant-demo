@@ -1,10 +1,10 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { MicOff, PhoneOff, Volume, Mic, Volume2 } from "lucide-react";
+import { MicOff, PhoneOff, Volume2, Mic, Phone } from "lucide-react";
 
 interface CallButtonProps {
-  type: "mute" | "end_call" | "volume";
+  type: "mute" | "end_call" | "volume" | "start_call";
   onClick: () => void;
   active?: boolean;
   className?: string;
@@ -15,6 +15,8 @@ const CallButton = ({ type, onClick, active = false, className }: CallButtonProp
     switch (type) {
       case "end_call":
         return "bg-ministry-red hover:bg-red-600 shadow-lg shadow-red-500/30";
+      case "start_call":
+        return "bg-ministry-green hover:bg-green-600 shadow-lg shadow-green-500/30";
       default:
         return active 
           ? "bg-ministry-green text-white shadow-lg shadow-green-500/30" 
@@ -30,6 +32,8 @@ const CallButton = ({ type, onClick, active = false, className }: CallButtonProp
         return <PhoneOff className="h-6 w-6" />;
       case "volume":
         return <Volume2 className="h-6 w-6" />;
+      case "start_call":
+        return <Phone className="h-6 w-6" />;
       default:
         return null;
     }
@@ -43,6 +47,8 @@ const CallButton = ({ type, onClick, active = false, className }: CallButtonProp
         return "إنهاء المكالمة";
       case "volume":
         return "الصوت";
+      case "start_call":
+        return "بدء المكالمة";
       default:
         return "";
     }
@@ -62,7 +68,7 @@ const CallButton = ({ type, onClick, active = false, className }: CallButtonProp
       <span className="sr-only">{getTooltip()}</span>
       
       {/* تأثير نبض عند التفعيل */}
-      {active && type !== "end_call" && (
+      {active && (type === "start_call" || type !== "end_call") && (
         <span className="absolute inset-0 rounded-full bg-ministry-green animate-ping opacity-25"></span>
       )}
     </button>
