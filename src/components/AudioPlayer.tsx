@@ -27,6 +27,8 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         try {
           if (audioRef.current) {
             console.log("▶️ Playing audio");
+            // Reset to beginning before playing to ensure playback starts from the start
+            audioRef.current.currentTime = 0;
             await audioRef.current.play();
             isPlayingRef.current = true;
             if (onPlay) onPlay();
@@ -64,6 +66,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
           
           // Only set new source if it's different
           if (isNewSource) {
+            console.log("🔊 Setting new audio source");
             audioRef.current.src = audioSource;
             audioRef.current.load();
             
@@ -90,6 +93,12 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
     useEffect(() => {
       if (audioRef.current) {
         audioRef.current.volume = isMuted ? 0 : volume;
+        
+        // If muted during playback, pause the audio
+        if (isMuted && isPlayingRef.current) {
+          audioRef.current.pause();
+          isPlayingRef.current = false;
+        }
       }
     }, [volume, isMuted]);
     

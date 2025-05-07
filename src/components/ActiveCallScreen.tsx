@@ -29,6 +29,8 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(true);
   const [audioMuted, setAudioMuted] = useState<boolean>(false);
   const [audioLevel, setAudioLevel] = useState<number>(0);
+  const [showErrorMessage, setShowErrorMessage] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
   const { toast } = useToast();
   
   // References
@@ -42,6 +44,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   const recorderRef = useRef<VoiceRecorderInterface | null>(null);
   const processingUserInputRef = useRef<boolean>(false);
   const noSpeechTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // The AI assistant hook
   const { 
@@ -74,6 +77,24 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     }
   }, []);
 
+  // Show error message with auto-dismiss
+  const showError = useCallback((message: string, duration: number = 5000) => {
+    setErrorMessage(message);
+    setShowErrorMessage(true);
+    
+    // Clear any existing timeout
+    if (errorTimeoutRef.current) {
+      clearTimeout(errorTimeoutRef.current);
+    }
+    
+    // Auto-dismiss after duration
+    errorTimeoutRef.current = setTimeout(() => {
+      setShowErrorMessage(false);
+      setErrorMessage("");
+      errorTimeoutRef.current = null;
+    }, duration);
+  }, []);
+
   // Initialize the voice recorder
   useEffect(() => {
     recorderRef.current = createVoiceRecorder({
@@ -86,6 +107,12 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       // Clean up
       if (recorderRef.current && recorderRef.current.isRecording()) {
         recorderRef.current.cancelRecording();
+      }
+      
+      // Clear error timeout
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+        errorTimeoutRef.current = null;
       }
     };
   }, []);
@@ -100,6 +127,9 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       
       // Stop any current audio
       stopCurrentAudio();
+      
+      // Hide any error messages
+      setShowErrorMessage(false);
       
       // Show current transcript
       setCurrentTranscript(text.trim());
@@ -163,6 +193,9 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     try {
       if (processingUserInputRef.current) return;
       
+      // Hide any error messages
+      setShowErrorMessage(false);
+      
       // Stop any playing audio and cancel any pending requests
       stopCurrentAudio();
       cancelRequest?.();
@@ -191,13 +224,9 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     } catch (err) {
       console.error("❌ Error starting recording:", err);
       setIsRecording(false);
-      toast({
-        title: "خطأ في تسجيل الصوت",
-        description: "لم نتمكن من تشغيل الميكروفون. يرجى التأكد من السماح بالوصول.",
-        variant: "destructive",
-      });
+      showError("لم نتمكن من تشغيل الميكروفون. يرجى التأكد من السماح بالوصول.", 3000);
     }
-  }, [stopCurrentAudio, audioLevel, cancelRequest]);
+  }, [stopCurrentAudio, audioLevel, cancelRequest, showError]);
   
   // Handle end of recording
   const handleStopRecording = useCallback(async (noSpeechDetected = false) => {
@@ -221,36 +250,35 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       
       // If we detected no speech, show a message
       if (noSpeechDetected || audioBlob.size < 1000) {
-        setCurrentTranscript("لم يتم التقاط صوت، حاول مرة أخرى");
-        setTimeout(() => {
-          setCurrentTranscript("");
-        }, 2000);
+        showError("لم يتم التقاط صوت، حاول مرة أخرى", 2000);
         return;
       }
       
+      console.log(`🎤 Recorded audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
+      
       // Transcribe the audio
-      const text = await speechTranscriptionService.transcribeAudio(audioBlob);
-      
-      if (!text) {
-        throw new Error("Failed to transcribe speech");
+      try {
+        const text = await speechTranscriptionService.transcribeAudio(audioBlob);
+        
+        if (!text) {
+          throw new Error("Failed to transcribe speech");
+        }
+        
+        // Process the transcribed text
+        await processUserInput(text);
+      } catch (transcriptionError) {
+        console.error("❌ Error in transcription:", transcriptionError);
+        showError("لم نتمكن من تحويل الصوت إلى نص. يرجى المحاولة مرة أخرى.", 3000);
       }
-      
-      // Process the transcribed text
-      await processUserInput(text);
       
     } catch (err) {
       console.error("❌ Error stopping recording:", err);
       setIsRecording(false);
       setCurrentTranscript("");
       
-      toast({
-        title: "خطأ في معالجة الصوت",
-        description: "لم نتمكن من تحويل الصوت إلى نص. يرجى المحاولة مرة أخرى.",
-        variant: "destructive",
-        duration: 3000,
-      });
+      showError("خطأ في معالجة الصوت، يرجى المحاولة مرة أخرى.", 3000);
     }
-  }, [processUserInput]);
+  }, [processUserInput, showError]);
 
   // Handle suggested question selection
   const handleQuestionSelect = (question: string) => {
@@ -328,6 +356,10 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       if (noSpeechTimeoutRef.current) {
         clearTimeout(noSpeechTimeoutRef.current);
       }
+      
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
     };
   }, [stopCurrentAudio, cancelRequest]);
 
@@ -395,6 +427,16 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
           />
         ))}
       </div>
+      
+      {/* Error message display */}
+      {showErrorMessage && (
+        <div className="absolute top-16 left-4 right-4 z-30">
+          <div className="bg-red-500 text-white px-4 py-3 rounded-lg shadow-lg">
+            <h3 className="font-bold">خطأ في معالجة الصوت</h3>
+            <p>{errorMessage || "لم نتمكن من تحويل الصوت إلى نص. يرجى المحاولة مرة أخرى."}</p>
+          </div>
+        </div>
+      )}
       
       {/* Animated avatar - center of screen */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">

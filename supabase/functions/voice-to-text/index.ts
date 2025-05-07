@@ -59,10 +59,10 @@ serve(async (req) => {
     // إعداد FormData
     const formData = new FormData()
     
-    // Determine appropriate mime type based on data
-    const mimeType = 'audio/webm';
+    // Determine appropriate mime type - use mp3 which is widely supported by OpenAI
+    const mimeType = 'audio/mp3';
     const blob = new Blob([binaryAudio], { type: mimeType })
-    formData.append('file', blob, 'audio.webm')
+    formData.append('file', blob, 'audio.mp3')
     formData.append('model', 'whisper-1')
     formData.append('language', language) // تحديد اللغة 
 

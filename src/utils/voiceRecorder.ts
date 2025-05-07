@@ -4,7 +4,7 @@
  */
 
 // Configuration
-const DEFAULT_SAMPLE_RATE = 44100;
+const DEFAULT_SAMPLE_RATE = 48000;
 const DEFAULT_CHANNELS = 1;
 
 // Types
@@ -35,8 +35,29 @@ export function createVoiceRecorder(options: RecorderOptions = {}): VoiceRecorde
   let audioLevel = 0;
   let animationFrameId: number | null = null;
 
+  // Check supported mime types
+  const getSupportedMimeType = () => {
+    const types = [
+      'audio/webm',
+      'audio/webm;codecs=opus',
+      'audio/ogg;codecs=opus',
+      'audio/mp4',
+      'audio/wav'
+    ];
+    
+    for (const type of types) {
+      if (MediaRecorder.isTypeSupported(type)) {
+        console.log(`🎤 Using supported mime type: ${type}`);
+        return type;
+      }
+    }
+    
+    console.log('🎤 Defaulting to audio/webm');
+    return 'audio/webm';
+  };
+  
   // Preferred audio format or fallback
-  const mimeType = options.mimeType || 'audio/webm';
+  const mimeType = options.mimeType || getSupportedMimeType();
   
   // Close all active media
   const closeMedia = () => {
@@ -118,9 +139,11 @@ export function createVoiceRecorder(options: RecorderOptions = {}): VoiceRecorde
       analyser.smoothingTimeConstant = 0.8;
       audioSource.connect(analyser);
       
+      console.log(`🎤 Starting recording with mime type: ${mimeType}`);
+      
       // Initialize recorder with options
       mediaRecorder = new MediaRecorder(mediaStream, {
-        mimeType: MediaRecorder.isTypeSupported(mimeType) ? mimeType : 'audio/webm',
+        mimeType: MediaRecorder.isTypeSupported(mimeType) ? mimeType : getSupportedMimeType(),
         audioBitsPerSecond: options.audioBitsPerSecond || 128000
       });
       
@@ -134,6 +157,8 @@ export function createVoiceRecorder(options: RecorderOptions = {}): VoiceRecorde
           }
         }
       };
+      
+      console.log(`🎤 MediaRecorder created with mimeType: ${mediaRecorder.mimeType}`);
       
       // Start the recording
       mediaRecorder.start(1000); // Capture in 1-second chunks
@@ -160,7 +185,24 @@ export function createVoiceRecorder(options: RecorderOptions = {}): VoiceRecorde
       mediaRecorder.onstop = () => {
         try {
           // Create blob from recorded chunks
-          const blob = new Blob(recordedChunks, { type: mediaRecorder?.mimeType || 'audio/webm' });
+          let finalMimeType = mediaRecorder?.mimeType || 'audio/webm';
+          
+          // Log the recorded chunks and mime type for debugging
+          console.log(`🎤 Recording stopped. Chunks: ${recordedChunks.length}, type: ${finalMimeType}`);
+          
+          // Ensure the mime type is compatible with Whisper API
+          if (!finalMimeType.includes('webm') && 
+              !finalMimeType.includes('mp3') && 
+              !finalMimeType.includes('mp4') && 
+              !finalMimeType.includes('wav') && 
+              !finalMimeType.includes('ogg')) {
+            console.log('🎤 Converting to compatible audio format: audio/webm');
+            finalMimeType = 'audio/webm';
+          }
+          
+          const blob = new Blob(recordedChunks, { type: finalMimeType });
+          console.log(`🎤 Final blob created: ${blob.size} bytes, type: ${blob.type}`);
+          
           closeMedia();
           resolve(blob);
         } catch (err) {
