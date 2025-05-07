@@ -26,7 +26,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       play: async () => {
         try {
           if (audioRef.current) {
-            console.log("▶️ Playing audio");
+            console.log("▶️ تشغيل الصوت");
             // Reset to beginning before playing to ensure playback starts from the start
             audioRef.current.currentTime = 0;
             await audioRef.current.play();
@@ -34,18 +34,18 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
             if (onPlay) onPlay();
           }
         } catch (error) {
-          console.error("❌ Audio play error:", error);
+          console.error("❌ خطأ في تشغيل الصوت:", error);
           isPlayingRef.current = false;
-          if (onError) onError(error instanceof Error ? error : new Error('Failed to play audio'));
+          if (onError) onError(error instanceof Error ? error : new Error('فشل في تشغيل الصوت'));
         }
       },
       pause: () => {
         if (audioRef.current) {
-          console.log("⏸️ Pausing audio");
+          console.log("⏸️ إيقاف الصوت");
           audioRef.current.pause();
-          audioRef.current.currentTime = 0; // Reset position to start
+          audioRef.current.currentTime = 0; // إعادة تعيين الموضع إلى البداية
           isPlayingRef.current = false;
-          // Manually trigger onended to signal complete stop
+          // تشغيل onended يدويًا للإشارة إلى التوقف التام
           if (onEnded) onEnded();
         }
       },
@@ -59,35 +59,50 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       if (!audioSource) return;
       
       const setupAudio = async () => {
-        if (audioRef.current) {
-          // Store the previous source to detect changes
-          const previousSource = audioRef.current.src;
-          const isNewSource = previousSource !== audioSource;
+        if (!audioRef.current) {
+          audioRef.current = new Audio();
           
-          // Only set new source if it's different
-          if (isNewSource) {
-            console.log("🔊 Setting new audio source");
-            audioRef.current.src = audioSource;
-            audioRef.current.load();
-            
-            if (autoPlay && !isMuted) {
-              try {
-                console.log("▶️ Auto-playing audio");
-                await audioRef.current.play();
-                isPlayingRef.current = true;
-                if (onPlay) onPlay();
-              } catch (error) {
-                console.error("❌ Auto-play failed:", error);
-                isPlayingRef.current = false;
-                if (onError) onError(error instanceof Error ? error : new Error('Failed to auto-play audio'));
-              }
+          // Set event listeners
+          audioRef.current.onended = () => {
+            console.log("🔊 انتهى تشغيل الصوت");
+            isPlayingRef.current = false;
+            if (onEnded) onEnded();
+          };
+          
+          audioRef.current.onerror = (event) => {
+            console.error("❌ خطأ في الصوت:", event);
+            isPlayingRef.current = false;
+            if (onError) {
+              const error = new Error("خطأ في تشغيل الصوت");
+              onError(error);
             }
+          };
+        }
+        
+        // Set the new source
+        audioRef.current.src = audioSource;
+        audioRef.current.load();
+        audioRef.current.volume = isMuted ? 0 : volume;
+        
+        console.log("🔊 تم تعيين مصدر صوت جديد");
+        
+        // Auto-play if enabled
+        if (autoPlay && !isMuted) {
+          try {
+            console.log("▶️ تشغيل تلقائي للصوت");
+            await audioRef.current.play();
+            isPlayingRef.current = true;
+            if (onPlay) onPlay();
+          } catch (error) {
+            console.error("❌ فشل التشغيل التلقائي:", error);
+            isPlayingRef.current = false;
+            if (onError) onError(error instanceof Error ? error : new Error('فشل في التشغيل التلقائي للصوت'));
           }
         }
       };
       
       setupAudio();
-    }, [audioSource, autoPlay, onPlay, onError, isMuted]);
+    }, [audioSource, autoPlay, onPlay, onError, onEnded, isMuted, volume]);
     
     // Handle volume changes and muting
     useEffect(() => {
@@ -102,34 +117,9 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       }
     }, [volume, isMuted]);
     
-    // Create audio element with proper event handling
+    // Clean up on unmount
     useEffect(() => {
-      if (!audioRef.current) {
-        const audio = new Audio();
-        audioRef.current = audio;
-        
-        // Set event listeners
-        audio.onended = () => {
-          console.log("🔊 Audio playback ended");
-          isPlayingRef.current = false;
-          if (onEnded) onEnded();
-        };
-        
-        audio.onerror = (event) => {
-          console.error("❌ Audio error:", event);
-          isPlayingRef.current = false;
-          if (onError) {
-            const error = new Error("Audio playback error");
-            onError(error);
-          }
-        };
-        
-        // Set initial volume
-        audio.volume = isMuted ? 0 : volume;
-      }
-      
       return () => {
-        // Clean up audio element
         if (audioRef.current) {
           audioRef.current.pause();
           audioRef.current.src = '';
@@ -138,7 +128,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
           isPlayingRef.current = false;
         }
       };
-    }, [onEnded, onError, volume, isMuted]);
+    }, []);
     
     return null; // Audio player is not visible
   }

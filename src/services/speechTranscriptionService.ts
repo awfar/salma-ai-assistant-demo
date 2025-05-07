@@ -20,17 +20,18 @@ export const speechTranscriptionService = {
         throw new Error("لم يتم اكتشاف صوت واضح. يرجى المحاولة مرة أخرى والتحدث بصوت أعلى.");
       }
       
-      // Ensure the audio is in a compatible format
+      // Make sure we have MP3 format for compatibility with OpenAI Whisper API
+      console.log("🔄 تحويل تنسيق الصوت إلى mp3...");
+      
+      // Initialize with the original blob as a fallback
       let processedBlob = audioBlob;
       
-      // تحويل الملف إلى MP3 لضمان التوافق مع Whisper API
+      // Force MP3 MIME type to ensure compatibility
       try {
-        console.log("🔄 تحويل تنسيق الصوت إلى mp3...");
         processedBlob = new Blob([await audioBlob.arrayBuffer()], { type: 'audio/mp3' });
         console.log("✅ تم تحويل التنسيق:", processedBlob.type);
       } catch (e) {
         console.error("❌ فشل تحويل التنسيق:", e);
-        // استمر باستخدام الملف الأصلي كخطة بديلة
       }
       
       this.logAudioBlobInfo(processedBlob);
@@ -39,8 +40,13 @@ export const speechTranscriptionService = {
       console.log("🔄 تحويل الصوت إلى صيغة Base64...");
       const audioBase64 = await blobToBase64(processedBlob);
       
-      console.log("🔄 إرسال الصوت للتحويل إلى نص...");
+      if (!audioBase64) {
+        throw new Error("فشل في تحويل الصوت إلى صيغة Base64.");
+      }
       
+      console.log("🔄 إرسال الصوت للتحويل إلى نص...", "طول البيانات:", audioBase64.length);
+      
+      // Call the Supabase Edge Function
       const { data, error } = await supabase.functions.invoke('voice-to-text', {
         body: { 
           audio: audioBase64,

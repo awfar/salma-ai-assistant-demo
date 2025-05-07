@@ -38,22 +38,22 @@ export function createVoiceRecorder(options: RecorderOptions = {}): VoiceRecorde
   // Check supported mime types
   const getSupportedMimeType = () => {
     const types = [
-      'audio/mp3',
-      'audio/mpeg',
       'audio/webm',
+      'audio/mp4',
+      'audio/ogg',
       'audio/webm;codecs=opus',
-      'audio/ogg;codecs=opus',
-      'audio/wav'
+      'audio/mp3',
+      'audio/mpeg'
     ];
     
     for (const type of types) {
       if (MediaRecorder.isTypeSupported(type)) {
-        console.log(`🎤 Using supported mime type: ${type}`);
+        console.log(`🎤 استخدام نوع MIME المدعوم: ${type}`);
         return type;
       }
     }
     
-    console.log('🎤 Defaulting to audio/webm');
+    console.log('🎤 استخدام النوع الافتراضي audio/webm');
     return 'audio/webm';
   };
   
@@ -140,17 +140,22 @@ export function createVoiceRecorder(options: RecorderOptions = {}): VoiceRecorde
       analyser.smoothingTimeConstant = 0.8;
       audioSource.connect(analyser);
       
-      console.log(`🎤 Starting recording with mime type: ${mimeType}`);
+      console.log(`🎤 بدء التسجيل باستخدام نوع MIME: ${mimeType}`);
+      
+      // Test if the selected MIME type is actually supported
+      const finalMimeType = MediaRecorder.isTypeSupported(mimeType) ? mimeType : getSupportedMimeType();
+      console.log(`🎤 نوع MIME النهائي: ${finalMimeType}`);
       
       // Initialize recorder with options, ensuring high bit rate for Arabic speech
       mediaRecorder = new MediaRecorder(mediaStream, {
-        mimeType: MediaRecorder.isTypeSupported(mimeType) ? mimeType : getSupportedMimeType(),
+        mimeType: finalMimeType,
         audioBitsPerSecond: options.audioBitsPerSecond || 128000
       });
       
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           recordedChunks.push(event.data);
+          console.log(`🎤 تم استلام جزء من البيانات: ${event.data.size} بايت، نوع: ${event.data.type}`);
           
           // Optional callback for streaming data
           if (options.onDataAvailable) {
@@ -159,17 +164,17 @@ export function createVoiceRecorder(options: RecorderOptions = {}): VoiceRecorde
         }
       };
       
-      console.log(`🎤 MediaRecorder created with mimeType: ${mediaRecorder.mimeType}`);
+      console.log(`🎤 تم إنشاء MediaRecorder باستخدام نوع MIME: ${mediaRecorder.mimeType}`);
       
       // Start the recording
-      mediaRecorder.start(200); // Capture in 200ms chunks for more frequent data
+      mediaRecorder.start(100); // Capture in shorter chunks for more frequent data
       recording = true;
       
       // Start audio level monitoring
       processAudio();
       
     } catch (error) {
-      console.error('Error starting recording:', error);
+      console.error('خطأ في بدء التسجيل:', error);
       closeMedia();
       throw error;
     }
@@ -179,7 +184,7 @@ export function createVoiceRecorder(options: RecorderOptions = {}): VoiceRecorde
   const stopRecording = (): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       if (!mediaRecorder || !recording) {
-        reject(new Error('Recording not active'));
+        reject(new Error('التسجيل غير نشط'));
         return;
       }
       
@@ -187,24 +192,29 @@ export function createVoiceRecorder(options: RecorderOptions = {}): VoiceRecorde
         try {
           // Ensure we have something recorded
           if (recordedChunks.length === 0) {
-            reject(new Error('No audio recorded'));
+            reject(new Error('لم يتم تسجيل أي صوت'));
             closeMedia();
             return;
           }
           
           // Log the recorded chunks for debugging
-          console.log(`🎤 Recording stopped. Chunks: ${recordedChunks.length}, total size: ${
+          console.log(`🎤 تم إيقاف التسجيل. عدد الأجزاء: ${recordedChunks.length}، إجمالي الحجم: ${
             recordedChunks.reduce((size, chunk) => size + chunk.size, 0)
-          } bytes`);
+          } بايت`);
           
-          // Always convert to MP3 format for best compatibility with Whisper API
-          const blob = new Blob(recordedChunks, { type: 'audio/mp3' });
-          console.log(`🎤 Final blob created: ${blob.size} bytes, type: ${blob.type}`);
+          // Create final blob - we want to make SURE it is in a format the backend can process
+          let blob;
+          const recordedMimeType = recordedChunks[0].type;
+          
+          // Create the blob with the detected type
+          blob = new Blob(recordedChunks, { type: recordedMimeType || 'audio/mp3' });
+          
+          console.log(`🎤 تم إنشاء ملف نهائي: ${blob.size} بايت، نوع: ${blob.type}`);
           
           closeMedia();
           resolve(blob);
         } catch (err) {
-          console.error('Error creating audio blob:', err);
+          console.error('خطأ في إنشاء ملف صوتي:', err);
           closeMedia();
           reject(err);
         }
@@ -214,7 +224,7 @@ export function createVoiceRecorder(options: RecorderOptions = {}): VoiceRecorde
       try {
         mediaRecorder.stop();
       } catch (err) {
-        console.error('Error stopping media recorder:', err);
+        console.error('خطأ في إيقاف مسجل الوسائط:', err);
         closeMedia();
         reject(err);
       }

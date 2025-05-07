@@ -38,12 +38,12 @@ const PushToTalkButton: React.FC<PushToTalkButtonProps> = ({
     
     // Start recording after a short delay to avoid accidental taps
     longPressTimeoutRef.current = setTimeout(() => {
-      console.log("🎤 Push-to-talk: Recording started");
+      console.log("🎤 زر التحدث: بدء التسجيل");
       onStartRecording();
       
       // Set a maximum recording time (7 seconds)
       maxRecordingTimeRef.current = setTimeout(() => {
-        console.log("⏱️ Push-to-talk: Max recording time reached");
+        console.log("⏱️ زر التحدث: تم الوصول للحد الأقصى لوقت التسجيل");
         handleStop();
       }, 7000);
     }, 200);
@@ -68,7 +68,7 @@ const PushToTalkButton: React.FC<PushToTalkButtonProps> = ({
     
     // If we were actually recording (not just a quick tap)
     if (isRecording) {
-      console.log("🎤 Push-to-talk: Recording stopped");
+      console.log("🎤 زر التحدث: توقف التسجيل");
       onStopRecording();
     }
     
@@ -115,8 +115,9 @@ const PushToTalkButton: React.FC<PushToTalkButtonProps> = ({
           "relative flex items-center justify-center rounded-full p-5 text-white transition-all transform",
           isPressing ? "bg-ministry-green scale-95" : "bg-gray-800 hover:bg-gray-700",
           disabled ? "opacity-50 cursor-not-allowed" : "hover:scale-105 active:scale-95",
-          // Add user-select: none and touch-action: manipulation
-          "select-none touch-action-manipulation -webkit-user-select-none -webkit-touch-callout-none",
+          // إضافة خصائص لمنع التحديد واللمس
+          "select-none touch-action-manipulation mic-button",
+          "-webkit-user-select-none -webkit-touch-callout-none",
           className
         )}
         onPointerDown={handleStart}

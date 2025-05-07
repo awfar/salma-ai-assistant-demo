@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { PhoneOff, Volume2, Volume } from "lucide-react";
 import CallTimer from "@/components/CallTimer";
@@ -72,7 +73,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   // Stop current audio playback and reset speech state
   const stopCurrentAudio = useCallback(() => {
     if (audioControllerRef.current && audioControllerRef.current.isPlaying) {
-      console.log("🛑 Stopping current audio playback");
+      console.log("🛑 إيقاف تشغيل الصوت الحالي");
       audioControllerRef.current.pause();
       setIsSpeaking(false);
     }
@@ -98,7 +99,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
 
   // Initialize the voice recorder
   useEffect(() => {
-    console.log("🎤 Initializing voice recorder...");
+    console.log("🎤 تهيئة مسجل الصوت...");
     recorderRef.current = createVoiceRecorder({
       onAudioLevel: (level) => {
         setAudioLevel(level);
@@ -124,11 +125,14 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     if (!text.trim() || processingUserInputRef.current) return;
     
     try {
-      console.log("🔄 Processing user input:", text);
+      console.log("🔄 معالجة مدخلات المستخدم:", text);
       processingUserInputRef.current = true;
       
       // Stop any current audio
       stopCurrentAudio();
+      
+      // Cancel any pending requests
+      cancelRequest?.();
       
       // Hide any error messages
       setShowErrorMessage(false);
@@ -137,61 +141,63 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       setCurrentTranscript(text.trim());
       
       // Add user message
-      console.log("👤 User message:", text.trim());
+      console.log("👤 رسالة المستخدم:", text.trim());
       addMessage(text.trim(), "user");
       
       // Get response from AI assistant
-      console.log("🤖 Sending request to AI assistant...");
+      console.log("🤖 إرسال الطلب إلى المساعد الذكي...");
       const aiResponse = await askAssistant(text.trim());
       
       if (aiResponse) {
-        console.log("🤖 Received response from AI assistant:", aiResponse);
+        console.log("🤖 تم استلام الرد من المساعد الذكي:", aiResponse);
         
         // Add assistant response
         addMessage(aiResponse, "assistant");
         
         // Convert text to speech
         if (!audioMuted && isSpeakerOn) {
-          console.log("🔊 Converting text to speech...");
+          console.log("🔊 تحويل النص إلى كلام...");
           const audioUrl = await textToSpeech(aiResponse, {
             onStart: () => {
-              console.log("🔊 Starting audio playback");
+              console.log("🔊 بدء تشغيل الصوت");
               setIsSpeaking(true);
             },
             onEnd: () => {
-              console.log("🔊 Audio playback ended");
+              console.log("🔊 انتهى تشغيل الصوت");
               setIsSpeaking(false);
               handleAudioEnded();
             }
           });
           
           if (audioUrl) {
-            console.log("🔊 Got audio URL:", audioUrl.substring(0, 50) + "...");
+            console.log("🔊 تم الحصول على رابط الصوت:", audioUrl.substring(0, 50) + "...");
             setAudioSource(audioUrl);
           } else {
-            console.error("❌ Failed to get audio URL");
+            console.error("❌ فشل الحصول على رابط الصوت");
             handleAudioEnded(); 
           }
         } else {
           // If sound is disabled, skip audio phase
-          console.log("🔇 Skipping audio playback (muted or inactive)");
+          console.log("🔇 تخطي تشغيل الصوت (مكتوم أو غير نشط)");
           handleAudioEnded();
         }
       } else {
-        console.error("❌ No response from AI assistant");
+        console.error("❌ لا يوجد رد من المساعد الذكي");
         toast({
           title: "خطأ في الحصول على الرد",
           description: "لم نتمكن من الحصول على رد من المساعد الذكي. يرجى المحاولة مرة أخرى.",
           variant: "destructive",
         });
+        handleAudioEnded();
       }
     } catch (error) {
-      console.error("❌ Error processing input:", error);
+      console.error("❌ خطأ في معالجة المدخلات:", error);
       toast({
         title: "خطأ في معالجة المدخلات",
         description: error instanceof Error ? error.message : "حدث خطأ غير متوقع",
         variant: "destructive",
       });
+      handleAudioEnded();
     } finally {
       processingUserInputRef.current = false;
     }
@@ -200,14 +206,17 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   // Handle start of recording
   const handleStartRecording = useCallback(async () => {
     try {
-      if (processingUserInputRef.current) return;
+      // If we're already processing or speaking, stop first
+      if (processingUserInputRef.current || isSpeaking) {
+        console.log("🛑 إيقاف العمليات الجارية قبل البدء في التسجيل الجديد");
+        stopCurrentAudio();
+        cancelRequest?.();
+        // Give a moment for cleanup before starting
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
       
       // Hide any error messages
       setShowErrorMessage(false);
-      
-      // Stop any playing audio and cancel any pending requests
-      stopCurrentAudio();
-      cancelRequest?.();
       
       // Start recording
       if (!recorderRef.current) {
@@ -218,25 +227,25 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         });
       }
       
-      console.log("🎤 Starting voice recording...");
+      console.log("🎤 بدء تسجيل الصوت...");
       await recorderRef.current.startRecording();
       setIsRecording(true);
       setCurrentTranscript("جاري الاستماع...");
       
       // Set a timeout to check if no speech is detected
       noSpeechTimeoutRef.current = setTimeout(() => {
-        if (audioLevel < 0.1) {
-          console.log("⚠️ No speech detected within timeout period");
+        if (audioLevel < 0.1 && isRecording) {
+          console.log("⚠️ لم يتم اكتشاف كلام خلال فترة المهلة");
           handleStopRecording(true);
         }
       }, 6500); // Check just before 7 second max recording time
 
     } catch (err) {
-      console.error("❌ Error starting recording:", err);
+      console.error("❌ خطأ في بدء التسجيل:", err);
       setIsRecording(false);
       showError("لم نتمكن من تشغيل الميكروفون. يرجى التأكد من السماح بالوصول.", 3000);
     }
-  }, [stopCurrentAudio, audioLevel, cancelRequest, showError]);
+  }, [stopCurrentAudio, audioLevel, cancelRequest, showError, isRecording, isSpeaking]);
   
   // Handle end of recording
   const handleStopRecording = useCallback(async (noSpeechDetected = false) => {
@@ -256,34 +265,34 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       setCurrentTranscript("جاري معالجة الصوت...");
       
       // Stop the recording and get the audio blob
-      console.log("🎤 Stopping recording and getting audio blob...");
+      console.log("🎤 إيقاف التسجيل والحصول على الملف الصوتي...");
       const audioBlob = await recorderRef.current.stopRecording();
       
       // If we detected no speech, show a message
       if (noSpeechDetected || audioBlob.size < 1000) {
-        console.warn("⚠️ No speech detected or audio too small:", audioBlob.size);
+        console.warn("⚠️ لم يتم اكتشاف كلام أو الصوت صغير جدًا:", audioBlob.size);
         showError("لم يتم التقاط صوت، حاول مرة أخرى", 2000);
         return;
       }
       
-      console.log(`🎤 Recorded audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
+      console.log(`🎤 تم تسجيل ملف صوتي: ${audioBlob.size} بايت، نوع: ${audioBlob.type}`);
       
       // Transcribe the audio
       try {
-        console.log("🔄 Transcribing audio...");
+        console.log("🔄 تحويل الصوت إلى نص...");
         const text = await speechTranscriptionService.transcribeAudio(audioBlob);
         
         if (!text) {
-          console.error("❌ No text returned from transcription");
-          throw new Error("Failed to transcribe speech");
+          console.error("❌ لم يتم إرجاع أي نص من عملية التحويل");
+          throw new Error("فشل في تحويل الكلام إلى نص");
         }
         
-        console.log("✅ Transcription successful:", text);
+        console.log("✅ نجحت عملية التحويل:", text);
         
         // Process the transcribed text
         await processUserInput(text);
       } catch (transcriptionError) {
-        console.error("❌ Error in transcription:", transcriptionError);
+        console.error("❌ خطأ في التحويل:", transcriptionError);
         showError(
           transcriptionError instanceof Error 
             ? transcriptionError.message 
@@ -293,7 +302,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       }
       
     } catch (err) {
-      console.error("❌ Error stopping recording:", err);
+      console.error("❌ خطأ في إيقاف التسجيل:", err);
       setIsRecording(false);
       setCurrentTranscript("");
       
@@ -303,19 +312,19 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
 
   // Handle suggested question selection
   const handleQuestionSelect = (question: string) => {
-    console.log("🖱️ Quick question clicked:", question);
+    console.log("🖱️ تم النقر على سؤال سريع:", question);
     if (isSpeaking) {
-      console.log("🛑 Stopping AI speech to process question");
+      console.log("🛑 إيقاف كلام المساعد الذكي لمعالجة السؤال");
       stopCurrentAudio();
     }
     
     if (isRecording) {
-      console.log("🛑 Stopping recording to process question");
+      console.log("🛑 إيقاف التسجيل لمعالجة السؤال");
       recorderRef.current?.cancelRecording();
       setIsRecording(false);
     }
     
-    // Add a small delay to ensure everything is reset
+    // إضافة تأخير قصير للتأكد من إعادة ضبط كل شيء
     setTimeout(() => {
       processUserInput(question);
     }, 200);
@@ -384,7 +393,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     };
   }, [stopCurrentAudio, cancelRequest]);
 
-  // Play welcome message on first render - improved for reliability
+  // Play welcome message on first render
   useEffect(() => {
     // Don't try to play welcome if we've already done it or attempted it
     if (firstMessagePlayed.current || welcomeAttempted.current) {
@@ -393,43 +402,43 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
 
     welcomeAttempted.current = true;
     
-    // Play welcome message after a short delay
-    const welcomeTimer = setTimeout(async () => {
+    const playWelcomeMessage = async () => {
       try {
         const welcomeMessage = "أهلا بيك في وزارة التضامن الاجتماعي، معاك سلمى مساعدتك الذكية أنا هنا عشان اجاوبك على كل الاستفسارات. اضغط على زر الميكروفون واستمر بالضغط عليه وانت بتتكلم.";
-        console.log("🤖 Playing welcome message:", welcomeMessage);
+        console.log("🤖 تشغيل رسالة الترحيب:", welcomeMessage);
         
         // Add message to chat history
         addMessage(welcomeMessage, "assistant");
         
+        // Set speaking state to show animation first
+        setIsSpeaking(true);
+        
         // Only attempt text to speech if speaker is on
         if (isSpeakerOn) {
-          console.log("🔊 Converting welcome message to audio...");
-          
-          // First set speaking state to show animation
-          setIsSpeaking(true);
+          console.log("🔊 تحويل رسالة الترحيب إلى صوت...");
           
           const audioUrl = await textToSpeech(welcomeMessage, {
             onStart: () => {
-              console.log("🔊 Welcome message playback started");
+              console.log("🔊 بدأ تشغيل رسالة الترحيب");
               setIsSpeaking(true);
             },
             onEnd: () => {
-              console.log("🔊 Welcome message finished");
+              console.log("🔊 انتهت رسالة الترحيب");
               setIsSpeaking(false);
               handleAudioEnded();
+              firstMessagePlayed.current = true; // Mark as played after completion
             }
           });
           
           if (audioUrl) {
-            console.log("🔊 Setting welcome audio source");
+            console.log("🔊 تعيين مصدر صوت الترحيب");
             setAudioSource(audioUrl);
-            // Mark message as played
-            firstMessagePlayed.current = true;
           } else {
-            console.error("❌ Failed to get welcome audio URL");
+            console.error("❌ فشل الحصول على رابط صوت الترحيب");
             setIsSpeaking(false);
             handleAudioEnded();
+            // Still mark as played to avoid retries
+            firstMessagePlayed.current = true;
           }
         } else {
           // Just mark as played if speaker is off
@@ -438,11 +447,16 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
           handleAudioEnded();
         }
       } catch (error) {
-        console.error("❌ Error playing welcome message:", error);
+        console.error("❌ خطأ في تشغيل رسالة الترحيب:", error);
         setIsSpeaking(false);
         handleAudioEnded();
+        // Set as played to prevent retries
+        firstMessagePlayed.current = true;
       }
-    }, 1000); // Slightly longer delay to ensure components are mounted
+    };
+    
+    // Play welcome message after a short delay to ensure components are mounted
+    const welcomeTimer = setTimeout(playWelcomeMessage, 800);
     
     return () => clearTimeout(welcomeTimer);
   }, [textToSpeech, addMessage, isSpeakerOn, handleAudioEnded]);
@@ -586,14 +600,14 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       {/* Hidden audio player with updated muting control */}
       <AudioPlayer 
         audioSource={audioSource} 
-        autoPlay={Boolean(isSpeakerOn)}
+        autoPlay={Boolean(audioSource && isSpeakerOn)}
         onEnded={handleAudioEnded}
         onPlay={() => {
           setIsSpeaking(true);
-          console.log("🎵 Audio playback started");
+          console.log("🎵 بدأ تشغيل الصوت");
         }}
         onError={(e) => {
-          console.error("❌ Audio playback error:", e);
+          console.error("❌ خطأ في تشغيل الصوت:", e);
           handleAudioEnded();
         }}
         ref={setupAudioController}

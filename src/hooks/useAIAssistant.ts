@@ -24,10 +24,11 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
   // Cancel any in-progress requests
   const cancelRequest = useCallback(() => {
     if (abortControllerRef.current) {
-      console.log("🛑 Cancelling in-progress AI request");
+      console.log("🛑 إلغاء الطلب الجاري معالجته");
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
       setIsLoading(false);
+      setIsAudioLoading(false);
     }
   }, []);
   
@@ -53,12 +54,12 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
         "إزاي أقدم في البرنامج؟": "للتقديم في برنامج تكافل وكرامة، عليك التوجه لأقرب وحدة اجتماعية في منطقتك، واصطحاب البطاقة الشخصية وشهادات ميلاد الأطفال. سيتم ملء استمارة التقديم وإجراء بحث اجتماعي للتأكد من استيفاء شروط البرنامج، ثم يتم إبلاغك بالنتيجة خلال شهر تقريبًا.",
       };
       
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Simulate network delay - longer delay for more realistic experience
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Check if request was aborted
       if (signal.aborted) {
-        console.log("🛑 Request was cancelled");
+        console.log("🛑 تم إلغاء الطلب");
         return null;
       }
       
@@ -85,10 +86,10 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       
       return response;
     } catch (error) {
-      console.error("Error asking assistant:", error);
+      console.error("خطأ في سؤال المساعد:", error);
       
       if (error instanceof Error && error.name === "AbortError") {
-        console.log("🛑 Request was aborted");
+        console.log("🛑 تم إلغاء الطلب");
         return null;
       }
       
@@ -109,24 +110,37 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
     try {
       setIsAudioLoading(true);
       
-      // In production, this would call the ElevenLabs API via a Supabase Edge Function
-      // Here we're using a data URI as a placeholder for demo purposes
+      // Create a new abort controller
+      if (!abortControllerRef.current) {
+        abortControllerRef.current = new AbortController();
+      }
       
-      // Simulate TTS service delay
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // In production, we'd call the ElevenLabs API via a Supabase Edge Function
+      const { data, error } = await supabase.functions.invoke('text-to-speech', {
+        body: { text }
+      });
+      
+      if (error || !data) {
+        console.error("خطأ في تحويل النص إلى كلام:", error || "لا توجد بيانات");
+        throw new Error(error?.message || "فشل في تحويل النص إلى كلام");
+      }
+      
+      if (!data.audio) {
+        console.error("لم يتم إرجاع أي بيانات صوتية");
+        throw new Error("لم يتم إرجاع أي بيانات صوتية");
+      }
       
       // Callback for start of synthesis
       callbacks?.onStart && callbacks.onStart();
       
-      // For this demo, we use a placeholder audio data URI
-      // In a real app, you would convert the text to speech via an API call
-      const url = `data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA/+M4wAAAAAAAAAAAAEluZm8AAAAPAAAAAwAAAbAAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVaqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqv////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAYFf///////////8AAAACzEuEUgJ0jTAAAAAAAAAAAAAAAAAAAAAP/jOMQACkWWk2i1AQLzFq/9PgPnr/yEl+j00gA0Lt9PAGAciif8cnOPzn+XCCCCABAQGHX+bzmP/5znOc5xAAAAAQEIQhDjIQhCEOcQEOQhCEAAAQhCEIAAP+L4jHQkz99o+dXgdJxkEvic/4P9q7GqRI8jA3qaN07LAXaIBJPqOp24HfAtQ9C1gA7dtMnKUMNwEAQDJpjyrlr7l+rEWZg5YD2KFO5ARE0ilfh5rTFMcfmNT4XugELMAZBYctNLwyEsxZ7u6MRvLBjFzA9CMLbFwYKCrS2Zjbi/sFlzcVpMGHuY6Qi2NAaGY9yv4n/8uRLsZsS/usDYjMxQbdGCVZlY8/LDyR5/5FP5JtVEcHh8AqVs5zMY32F7KvBRgwP/4ziMcBwuzXdvHCFCAYUN3/e7vQm1CbrxNwJRAxICmbN+cIXj5znP/5xCf//hCHAIQAAABCHIQhCEOQhCEIQAAAAhCEIQAP+P64UKFZY8eAC99yNLv0TdI0Qz7EHcc2fxDWHRnk8AI13nBTkN7tPuKId3GVoexVMPjwh7ep4AxM6wG8y4UPdBxtXRuNOm0tszG6SvYtCDFKTJ1pmQMj1AYYYWkmZvQi6Bcz8aeO4F8iQ9xLa5G+oQr41s910ZGQcmXid1BR5xiXomsTCMMf9TNL+jYVaeAwoOuMAVDN10hggUheYpkNjU3TgiKghQlsb5MiPVEAEeojUfdSPlvHG/n44tkhkFWUiqkPObIVYWeIQQmTa6pqXh8gP/4ziMbB060ZWTPjCJD9RX3/ubw1ya6dAXsmF2igNmfDpigSohDLA5KDLA0YdT/OJz//IQh/+QhDkIQAAAAAIQhyEOAQAAAQhCEAAH/H/0ORjnQuEE4iHNwkFz5ovXSNYFeKALrOF+BQgQf26FgKPmwtWrvMndVgQaUPbRKkADiTlPgxhTHYgvX6FvFdFmfrb23kNHuoFIg26r5cu5mrS2BEYCgQHDxP1EBroEJNAUxSzpSiWiDCRIWRHEviv4h5z1rqL6QhhsTLwmhuzy+Z/kZ8uWfhohvCfYnNCg3TyD/ZE8JydB8kP/4ziMYBk2pTeVzYQTvOmafk7xv24KJnWBwSgckRWNQIIBhACAQaYIAAlm9xCf/IQhyEP5CEIQhyAAAAAAIQhDkAAP+L5EruTfAE73GFsPChQB3aqF0FZ2UvBTWXRVpLHJfd4UFRdI07JQgbfQoNClTjQgigBRQpBYxDrVKxxUQaYxxaI5EmW9LOsLcfVO4j2a3NFES2Z9FPPDQoFpH+cRvKyxEm1TLO5ZsN3prUtSvCkzcZBQKQS9aIa3SAGaUXxHOYLFn1WgDNdx6qImLE26jExeZTFIl9B0j3TSWUJuxnLOKdtFr9layx6Bya5SbqQxS0sL9wJElY9JH4xOszc4xZwYw//+M4jCQS+kZY+8EFKbhnZAkT18BLpVCAjybtYjIu3JkoxQYNEQK8OkNUCV0QIpR6ywpNnzPGCMIQhCEOQhyEIQhCAAAAAAhCEIAAP+D5NGvV7Zf+aqOrfrEyDDLf6hCEUL2oqo1Y/Ei4pcnO4gF2IZu2XTbi+ABueTnwYUuc5znEOc5znOc5xCEIQhDnOIQhCEOQhCHAAIQhCEAA//jOMQAK6ZFolO2UlH3EY/+v4HmjQqWT/H8HzSoUskAAAAAAf/7EsBPgUKiA5gzAAAIAAACSwAAABAAAIAAAAAA/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////+NAwAAAQAAAAAAOAEQPAC);`;
+      // Create audio URL from base64
+      const audioUrl = `data:audio/mp3;base64,${data.audio}`;
       
-      console.log("✅ Text to speech conversion successful");
+      console.log("✅ تم تحويل النص إلى كلام بنجاح");
       
-      return url;
+      return audioUrl;
     } catch (error) {
-      console.error("Error in text to speech:", error);
+      console.error("خطأ في تحويل النص إلى كلام:", error);
       toast({
         title: "خطأ في تحويل النص إلى صوت",
         description: "لم نتمكن من تحويل الرد إلى صوت. يرجى المحاولة مرة أخرى.",
