@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Volume2, Volume } from "lucide-react";
 import CallTimer from "@/components/CallTimer";
@@ -28,6 +27,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   const [audioSource, setAudioSource] = useState<string | undefined>();
   const [currentTranscript, setCurrentTranscript] = useState<string>("");
   const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(true);
+  const [audioMuted, setAudioMuted] = useState<boolean>(false); // New state to track audio muting separately
   const { toast } = useToast();
   
   // References
@@ -187,7 +187,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     } 
   }, []);
   
-  // Speech recognition hook with silence detection and speech detection
+  // Speech recognition hook with improved sensitivity
   const { 
     isListening,
     startListening,
@@ -208,9 +208,9 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     },
     onAudioLevelChange: handleAudioLevelChange,
     onSpeechDetected: handleSpeechDetected,
-    silenceThreshold: 0.03, // Lower threshold to detect more audio
-    silenceTimeout: 1000, // Slightly longer silence before stopping
-    minSpeechLevel: 0.08  // Lower threshold to consider as speech
+    silenceThreshold: 0.02, // Lower threshold to detect more audio
+    silenceTimeout: 1200, // Slightly longer silence before stopping
+    minSpeechLevel: 0.06  // Lower threshold to consider as speech
   });
 
   // Update transcript and monitor audio level during listening
@@ -286,13 +286,13 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     }
   }, [isMuted]);
 
-  // Handle mute button click
+  // Handle mute button click - Updated to only mute the microphone, not speaker
   const handleMuteClick = () => {
-    setIsMuted(!isMuted);
+    const newMutedState = !isMuted;
+    setIsMuted(newMutedState);
     
-    // If muting, stop current audio and listening
-    if (!isMuted) {
-      stopCurrentAudio();
+    if (newMutedState) {
+      // If muting, stop listening only
       if (isListening) {
         stopListening();
       }
@@ -314,11 +314,14 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     }
   };
 
-  // Handle speaker button click
+  // Handle speaker button click - now controls audio muting
   const handleSpeakerClick = () => {
-    setIsSpeakerOn(!isSpeakerOn);
+    const newSpeakerState = !isSpeakerOn;
+    setIsSpeakerOn(newSpeakerState);
+    setAudioMuted(!newSpeakerState); // This controls the audio element muting
+    
     toast({
-      title: isSpeakerOn ? "تم إيقاف مكبر الصوت" : "تم تشغيل مكبر الصوت",
+      title: newSpeakerState ? "تم تشغيل مكبر الصوت" : "تم إيقاف مكبر الصوت",
       duration: 2000,
     });
     
@@ -581,15 +584,16 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       {/* Enhanced Audio level indicator with better visibility */}
       {isListening && (
         <div 
-          className="absolute top-16 left-4 animate-pulse w-8 h-8 rounded-full flex items-center justify-center"
+          className="absolute top-16 left-4 animate-pulse w-10 h-10 rounded-full flex items-center justify-center"
           style={{
-            transform: `scale(${1 + audioLevel * 2})`,
+            transform: `scale(${1 + audioLevel * 2.5})`,
             opacity: Math.min(1, audioLevel + 0.4),
             backgroundColor: `rgba(52, 211, 153, ${audioLevel * 0.8})`,
-            transition: 'transform 100ms ease-out, opacity 100ms ease-out'
+            transition: 'transform 100ms ease-out, opacity 100ms ease-out',
+            boxShadow: `0 0 ${15 * audioLevel}px rgba(52, 211, 153, ${audioLevel * 0.8})`,
           }}
         >
-          <div className="w-4 h-4 bg-green-400 rounded-full" />
+          <div className="w-5 h-5 bg-green-400 rounded-full" />
         </div>
       )}
       
@@ -640,10 +644,10 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         </div>
       </div>
       
-      {/* Hidden audio player */}
+      {/* Hidden audio player with updated muting control */}
       <AudioPlayer 
         audioSource={audioSource} 
-        autoPlay={Boolean(isSpeakerOn && !isMuted)}
+        autoPlay={Boolean(isSpeakerOn)}
         onEnded={handleAudioEnded}
         onPlay={() => {
           setIsSpeaking(true);
@@ -654,6 +658,8 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
           handleAudioEnded();
         }}
         ref={setupAudioController}
+        isMuted={audioMuted} // Use separate audio mute state
+        volume={1.0} // Default to full volume, let isMuted control actual playback
       />
     </div>
   );

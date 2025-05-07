@@ -92,9 +92,6 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
   const speechDetectedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const volumeHistoryRef = useRef<number[]>([]);
 
-  // Declare stopListening function first as a reference
-  const stopListeningRef = useRef<() => void>(() => {});
-  
   // Reset transcript
   const resetTranscript = useCallback(() => {
     setTranscript('');
@@ -108,29 +105,32 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         
         if (!mediaStreamRef.current) {
-          console.log("🎤 Requesting microphone access...");
+          console.log("🎤 Requesting microphone access with enhanced parameters...");
           mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ 
             audio: {
               echoCancellation: true,
               noiseSuppression: true,
-              autoGainControl: true
+              autoGainControl: true,
+              sampleRate: 48000, // Higher sample rate
+              channelCount: 1
             } 
           });
-          console.log("🎤 Audio input started. Microphone access granted!");
+          console.log("🎤 Audio input started with enhanced parameters. Microphone access granted!");
         }
         
         const source = audioContextRef.current.createMediaStreamSource(mediaStreamRef.current);
         analyserRef.current = audioContextRef.current.createAnalyser();
-        analyserRef.current.fftSize = 256;
+        analyserRef.current.fftSize = 1024; // Increased for better resolution
+        analyserRef.current.smoothingTimeConstant = 0.5; // More responsive analysis
         source.connect(analyserRef.current);
-        console.log("✅ Audio analyzer set up successfully");
+        console.log("✅ Enhanced audio analyzer set up successfully");
       } catch (err) {
         console.error('❌ Error initializing audio context:', err);
       }
     }
   }, []);
 
-  // Stop listening implementation
+  // Stop listening functionality - define this first so it can be referenced
   const stopListening = useCallback(() => {
     try {
       if (recognitionRef.current) {
@@ -159,11 +159,6 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       console.error('Error stopping speech recognition:', err);
     }
   }, []);
-  
-  // Store stop listening in ref for reference before declaration
-  useEffect(() => {
-    stopListeningRef.current = stopListening;
-  }, [stopListening]);
 
   // Measure audio level with enhanced detection
   const measureAudioLevel = useCallback(() => {
@@ -172,20 +167,38 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
     analyserRef.current.getByteFrequencyData(dataArray);
     
-    // Calculate average volume and emphasize it for better visualization
+    // Calculate average volume level with more weight on speech frequencies
     let sum = 0;
-    for (let i = 0; i < dataArray.length; i++) {
-      sum += dataArray[i];
-    }
-    const average = sum / dataArray.length;
+    let speakingSum = 0;
+    const length = dataArray.length;
     
-    // Normalize to 0-1 and apply a slight emphasis curve
-    const normalizedValue = Math.min(Math.pow(average / 128, 1.2), 1);
+    // Focus on frequencies in human speech range (roughly 85-255Hz indexes in a 1024 FFT)
+    const speechStart = Math.floor(length * 0.08);
+    const speechEnd = Math.floor(length * 0.25);
+    
+    for (let i = 0; i < length; i++) {
+      // Regular average
+      sum += dataArray[i];
+      
+      // Enhanced weight for speech frequencies
+      if (i >= speechStart && i <= speechEnd) {
+        speakingSum += dataArray[i] * 1.5; // Give more weight to speech frequencies
+      }
+    }
+    
+    const average = sum / length;
+    const speechWeightedAverage = speakingSum / (speechEnd - speechStart);
+    
+    // Use the larger of the two averages, normalized to 0-1
+    const normalizedValue = Math.min(
+      Math.pow(Math.max(average, speechWeightedAverage) / 128, 1.2), 
+      1
+    );
     setAudioLevel(normalizedValue);
     
-    // Log audio level more frequently for debugging
+    // Log audio level occasionally
     if (Math.random() < 0.05) {  // Log about 5% of the time
-      console.log(`🔊 Audio level: ${normalizedValue.toFixed(2)}`);
+      console.log(`🔊 Audio level: ${normalizedValue.toFixed(2)}, Speech weighted: ${(speechWeightedAverage/128).toFixed(2)}`);
     }
     
     // Keep a small history of volume levels for smoother detection
@@ -213,7 +226,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
           console.log("🔊 Speech detection confirmed, triggering callback");
           onSpeechDetected();
         }
-      }, 150); // Short delay to confirm it's not just a spike
+      }, 100); // Shorter delay to confirm it's not just a spike
       
     } else if (recentAverage > silenceThreshold) {
       // Still getting audio, reset silence timestamp
@@ -232,7 +245,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
         silenceTimeoutRef.current = setTimeout(() => {
           if (isListening) {
             console.log(`🔇 Silence detected for ${silenceTimeout}ms, stopping listening`);
-            stopListeningRef.current();
+            stopListening();
           }
           silenceTimeoutRef.current = null;
         }, silenceTimeout);
@@ -245,7 +258,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     }
     
     animationFrameRef.current = requestAnimationFrame(measureAudioLevel);
-  }, [isListening, onAudioLevelChange, hasSpeechBeenDetected, minSpeechLevel, silenceThreshold, silenceTimeout, onSpeechDetected]);
+  }, [isListening, onAudioLevelChange, hasSpeechBeenDetected, minSpeechLevel, silenceThreshold, silenceTimeout, onSpeechDetected, stopListening]);
 
   // Initialize speech recognition
   const initRecognition = useCallback(() => {
@@ -267,12 +280,13 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
         return false;
       }
       
-      console.log("🎤 Initializing speech recognition...");
+      console.log("🎤 Initializing speech recognition with enhanced settings...");
       recognitionRef.current = new SpeechRecognitionAPI();
       
       recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = language;
+      recognitionRef.current.maxAlternatives = 3; // Get more alternatives
       
       recognitionRef.current.onstart = () => {
         console.log("🎤 Speech recognition started");
@@ -294,6 +308,11 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
         } else if (event.error === 'aborted') {
           // Aborted error is often temporary, so we'll just set a minimal error
           setError(new Error(`Speech recognition error: ${event.error}`));
+        } else if (event.error === 'network') {
+          // Network errors might be temporary, try to reinitialize
+          recognitionRef.current = null;
+          setTimeout(() => initRecognition(), 1000);
+          setError(new Error('Network error, attempting to reconnect...'));
         } else {
           setError(new Error(`Speech recognition error: ${event.error}`));
         }

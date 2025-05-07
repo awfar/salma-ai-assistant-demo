@@ -8,6 +8,7 @@ interface AudioPlayerProps {
   onPlay?: () => void;
   onError?: (error: Error) => void;
   volume?: number;
+  isMuted?: boolean; // New prop to separately control audio muting
 }
 
 interface AudioPlayerRef {
@@ -17,7 +18,7 @@ interface AudioPlayerRef {
 }
 
 const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
-  ({ audioSource, autoPlay = true, onEnded, onPlay, onError, volume = 1 }, ref) => {
+  ({ audioSource, autoPlay = true, onEnded, onPlay, onError, volume = 1, isMuted = false }, ref) => {
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const isPlayingRef = useRef(false);
     
@@ -60,7 +61,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
           audioRef.current.src = audioSource;
           audioRef.current.load();
           
-          if (autoPlay) {
+          if (autoPlay && !isMuted) {
             try {
               console.log("▶️ Auto-playing audio");
               await audioRef.current.play();
@@ -76,14 +77,14 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       };
       
       setupAudio();
-    }, [audioSource, autoPlay, onPlay, onError]);
+    }, [audioSource, autoPlay, onPlay, onError, isMuted]);
     
-    // Handle volume changes
+    // Handle volume changes and muting
     useEffect(() => {
       if (audioRef.current) {
-        audioRef.current.volume = volume;
+        audioRef.current.volume = isMuted ? 0 : volume;
       }
-    }, [volume]);
+    }, [volume, isMuted]);
     
     // Create audio element
     useEffect(() => {
@@ -107,7 +108,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         };
         
         // Set initial volume
-        audioRef.current.volume = volume;
+        audioRef.current.volume = isMuted ? 0 : volume;
       }
       
       return () => {
@@ -120,7 +121,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
           isPlayingRef.current = false;
         }
       };
-    }, [onEnded, onError, volume]);
+    }, [onEnded, onError, volume, isMuted]);
     
     return null; // Audio player is not visible
   }

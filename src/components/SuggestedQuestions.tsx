@@ -37,10 +37,10 @@ const SuggestedQuestions: React.FC<SuggestedQuestionsProps> = ({
 
   return (
     <div className={cn("w-full relative", className)}>
-      {/* أزرار التمرير */}
+      {/* Scroll buttons */}
       <button
         onClick={scrollRight}
-        className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-ministry-dark/20 backdrop-blur-sm p-1 rounded-full hover:bg-ministry-dark/30 transition-colors rtl:rotate-180"
+        className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-ministry-dark/40 backdrop-blur-sm p-1.5 rounded-full hover:bg-ministry-dark/60 hover:scale-110 active:scale-95 transition-all rtl:rotate-180 shadow-lg"
         aria-label="تمرير لليسار"
       >
         <ChevronRight className="h-5 w-5 text-white" />
@@ -48,23 +48,24 @@ const SuggestedQuestions: React.FC<SuggestedQuestionsProps> = ({
       
       <button
         onClick={scrollLeft}
-        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-ministry-dark/20 backdrop-blur-sm p-1 rounded-full hover:bg-ministry-dark/30 transition-colors rtl:rotate-180"
+        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-ministry-dark/40 backdrop-blur-sm p-1.5 rounded-full hover:bg-ministry-dark/60 hover:scale-110 active:scale-95 transition-all rtl:rotate-180 shadow-lg"
         aria-label="تمرير لليمين"
       >
         <ChevronLeft className="h-5 w-5 text-white" />
       </button>
       
-      {/* قائمة الأسئلة المقترحة */}
+      {/* Suggested questions list */}
       <div
         ref={scrollRef}
-        className="flex overflow-x-auto py-2 px-8 scrollbar-hide snap-x gap-2"
+        className="flex overflow-x-auto py-3 px-8 scrollbar-hide snap-x gap-2"
         dir="rtl"
       >
         {questions.map((question, index) => (
           <button
             key={index}
             onClick={() => handleQuestionClick(question)}
-            className="px-4 py-2 bg-white/20 backdrop-blur-sm text-white border border-white/30 rounded-full text-sm whitespace-nowrap hover:bg-white/30 transition-colors snap-start active:scale-95 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white/50"
+            className="px-4 py-2 bg-white/25 backdrop-blur-sm text-white border border-white/30 rounded-full text-sm whitespace-nowrap hover:bg-white/40 transition-all snap-start 
+            active:scale-95 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white/50 transform hover:shadow-lg shadow-md"
           >
             {question}
           </button>
