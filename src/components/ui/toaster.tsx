@@ -21,6 +21,30 @@ export function Toaster() {
     return null
   }
 
+  const handleActivateAudio = () => {
+    try {
+      // Create and resume AudioContext
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      const audioContext = new AudioContext();
+      
+      // Create silent buffer to unlock audio
+      const buffer = audioContext.createBuffer(1, 1, 22050);
+      const source = audioContext.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioContext.destination);
+      source.start();
+      
+      // Try to resume if suspended
+      if (audioContext.state === 'suspended') {
+        audioContext.resume().catch(console.error);
+      }
+      
+      console.log("✅ Audio activated from toast button");
+    } catch (err) {
+      console.error("❌ Failed to activate audio from toast:", err);
+    }
+  };
+
   return (
     <ToastProvider>
       {toasts.map(function ({ id, title, description, action, variant, ...props }) {
@@ -44,7 +68,7 @@ export function Toaster() {
         );
 
         return (
-          <Toast key={id} variant={variant} {...props} className={isAudioError ? "border-red-500" : ""}>
+          <Toast key={id} variant={variant} {...props} className={isAudioError ? "border-red-500 animate-pulse" : ""}>
             <div className="grid gap-1">
               {title && (
                 <ToastTitle className="flex items-center gap-2">
@@ -60,31 +84,11 @@ export function Toaster() {
                   <Button 
                     variant="outline" 
                     size="sm" 
-                    className="flex items-center gap-1 text-xs"
-                    onClick={() => {
-                      // Create and resume AudioContext
-                      try {
-                        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-                        const audioContext = new AudioContext();
-                        
-                        // Create silent buffer to unlock audio
-                        const buffer = audioContext.createBuffer(1, 1, 22050);
-                        const source = audioContext.createBufferSource();
-                        source.buffer = buffer;
-                        source.connect(audioContext.destination);
-                        source.start();
-                        
-                        // Try to resume if suspended
-                        if (audioContext.state === 'suspended') {
-                          audioContext.resume().catch(console.error);
-                        }
-                      } catch (err) {
-                        console.error("Failed to initialize audio in toast:", err);
-                      }
-                    }}
+                    className="flex items-center gap-1 text-xs bg-green-50 border-green-500 hover:bg-green-100"
+                    onClick={handleActivateAudio}
                   >
-                    <RefreshCw className="h-3 w-3 mr-1" />
-                    إعادة تنشيط الصوت
+                    <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                    تنشيط الصوت
                   </Button>
                 </div>
               )}

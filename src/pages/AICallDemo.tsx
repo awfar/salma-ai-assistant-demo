@@ -62,6 +62,16 @@ const AICallDemo = () => {
             // Test audio output
             const audioOutputWorks = await testAudioOutput(true);
             console.log("🔊 Audio output test:", audioOutputWorks ? "successful" : "failed");
+            
+            if (!audioOutputWorks) {
+              setAudioInitialization('failed');
+              toast({
+                title: "مشكلة في الصوت",
+                description: "لم نتمكن من تشغيل الصوت. انقر على زر التنشيط الأخضر الكبير في الأسفل.",
+                variant: "destructive",
+                duration: 10000,
+              });
+            }
           } catch (err) {
             console.error("❌ Failed to initialize audio system:", err);
             setAudioInitialization('failed');
@@ -166,6 +176,9 @@ const AICallDemo = () => {
     try {
       console.log("🎤 Starting call and initializing audio...");
       
+      // Force audio activation first
+      await handleActivateAudio();
+      
       // Play a sound to verify audio is working when call starts
       await playVerificationSound(false); // Use audible sound for feedback
       
@@ -245,8 +258,9 @@ const AICallDemo = () => {
     navigate('/ai-settings');
   };
   
-  // Handle audio activation attempts
+  // Handle audio activation attempts - Enhanced for better reliability
   const handleActivateAudio = async () => {
+    console.log("🔊 Attempting to activate audio system...");
     setAudioInitialization('attempting');
     
     toast({
@@ -256,22 +270,40 @@ const AICallDemo = () => {
     });
     
     try {
+      // iOS devices require user interaction to activate audio
+      if (navigator.userAgent.match(/iPhone|iPad|iPod/i)) {
+        console.log("📱 iOS device detected, using special audio activation...");
+      }
+      
       // Force initialize AudioContext
       if (!audioContextRef.current) {
         const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
         audioContextRef.current = new AudioContext();
+        console.log("✅ Created new AudioContext");
       }
       
       // Resume AudioContext if suspended
       if (audioContextRef.current.state === 'suspended') {
+        console.log("⏯️ Resuming suspended AudioContext...");
         await audioContextRef.current.resume();
         console.log("✅ AudioContext resumed via button");
+      }
+      
+      // Play multiple silent sounds to unlock audio system
+      for (let i = 0; i < 3; i++) {
+        const silentBuffer = audioContextRef.current.createBuffer(1, 1, 22050);
+        const source = audioContextRef.current.createBufferSource();
+        source.buffer = silentBuffer;
+        source.connect(audioContextRef.current.destination);
+        source.start();
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
       
       // Play a test tone to verify audio works
       const success = await testAudioOutput(true);
       
       if (success) {
+        console.log("✅ Audio activated successfully");
         setAudioInitialized(true);
         setAudioInitialization('success');
         toast({
@@ -279,7 +311,31 @@ const AICallDemo = () => {
           description: "تم تنشيط نظام الصوت بنجاح. يمكنك الآن استخدام المساعد الصوتي.",
           duration: 3000,
         });
+        
+        // Force play another test sound after a brief delay
+        setTimeout(() => {
+          playVerificationSound(false).catch(err => {
+            console.error("❌ Error playing second verification sound:", err);
+          });
+        }, 500);
+        
+        // Try to get microphone permission while we're at it
+        if (!micPermissionGranted) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            setMicPermissionGranted(true);
+            // Release the stream after getting permission
+            setTimeout(() => {
+              stream.getTracks().forEach(track => track.stop());
+            }, 1000);
+          } catch (micErr) {
+            console.error("❌ Failed to get microphone permission:", micErr);
+          }
+        }
+        
+        return true;
       } else {
+        console.error("❌ Audio test failed");
         setAudioInitialization('failed');
         toast({
           title: "فشل تنشيط الصوت",
@@ -287,6 +343,7 @@ const AICallDemo = () => {
           variant: "destructive",
           duration: 5000,
         });
+        return false;
       }
     } catch (err) {
       console.error("❌ Error activating audio:", err);
@@ -297,6 +354,7 @@ const AICallDemo = () => {
         variant: "destructive",
         duration: 5000,
       });
+      return false;
     }
   };
 
@@ -322,16 +380,16 @@ const AICallDemo = () => {
       {/* Footer */}
       <CallFooter />
       
-      {/* Audio activation guide */}
-      <div className="fixed bottom-24 left-0 right-0 flex justify-center">
+      {/* Audio activation guide - ENHANCED */}
+      <div className="fixed bottom-28 left-0 right-0 flex justify-center z-50">
         {audioInitialization === 'failed' && (
-          <div className="bg-red-100 text-red-800 border border-red-300 rounded-md p-3 shadow-lg max-w-md mx-4">
+          <div className="bg-red-100 text-red-800 border-2 border-red-500 rounded-md p-3 shadow-lg max-w-md mx-4 animate-pulse">
             <h3 className="font-bold mb-1 text-center">⚠️ نظام الصوت غير نشط</h3>
-            <p className="text-sm mb-2">لاستخدام المساعد الصوتي، تحتاج إلى تنشيط نظام الصوت. انقر على زر "تنشيط الصوت" أدناه.</p>
+            <p className="text-sm mb-2 text-center">لاستخدام المساعد الصوتي، تحتاج إلى تنشيط نظام الصوت. انقر على زر "تنشيط الصوت" أدناه.</p>
             <div className="flex justify-center">
               <Button
                 onClick={handleActivateAudio}
-                className="bg-red-600 hover:bg-red-700 font-bold"
+                className="bg-red-600 hover:bg-red-700 font-bold text-white px-6 py-3"
               >
                 تنشيط الصوت
               </Button>
@@ -351,18 +409,21 @@ const AICallDemo = () => {
         </div>
       )}
       
-      {/* Audio activation button - made much more visible and prominent */}
+      {/* ENHANCED Audio activation button - made much more visible and prominent */}
       <button 
-        className="fixed bottom-4 left-4 z-50 bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 text-sm font-bold transition-all hover:scale-105 active:scale-95 animate-pulse"
+        className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 px-8 py-4 rounded-lg shadow-xl flex items-center gap-2 text-base font-bold transition-all hover:scale-105 active:scale-95 
+                    ${audioInitialization === 'attempting' ? 'bg-yellow-500 hover:bg-yellow-600 text-white' : 
+                     audioInitialization === 'success' ? 'bg-green-500 hover:bg-green-600 text-white' : 
+                     'bg-red-600 hover:bg-red-700 text-white animate-pulse'}`}
         onClick={handleActivateAudio}
         aria-label="Activate audio"
         style={{
-          boxShadow: "0 0 15px rgba(34, 197, 94, 0.6)",
+          boxShadow: "0 0 25px rgba(34, 197, 94, 0.8)",
         }}
       >
         {audioInitialization === 'attempting' ? (
           <>
-            <span className="animate-spin">⟳</span> جاري تنشيط الصوت...
+            <span className="animate-spin text-xl">⟳</span> جاري تنشيط الصوت...
           </>
         ) : audioInitialization === 'success' ? (
           <>🔊 تم تنشيط الصوت</>

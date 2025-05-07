@@ -9,11 +9,14 @@ const VOICE_ID = "Yko7PKHZNXotIFUBdGjp"; // Leila voice ID - Arabic female voice
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Cache-Control": "no-store, no-cache, must-revalidate",
 };
 
 serve(async (req) => {
+  console.log("🔊 Text-to-speech function called");
+  
   // Handle CORS requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -24,15 +27,17 @@ serve(async (req) => {
     const { text, voice = VOICE_ID, stream = true } = await req.json();
 
     if (!text) {
+      console.error("❌ No text provided for conversion");
       throw new Error("No text provided for conversion");
     }
 
-    console.log("Attempting to convert text:", text);
-    console.log("Using ElevenLabs voice ID:", voice);
-    console.log("Using streaming mode:", stream);
+    console.log("🔄 Converting text to speech:", text.substring(0, 50) + "...");
+    console.log("🎤 Using ElevenLabs voice ID:", voice);
+    console.log("🔄 Using streaming mode:", stream);
 
     // Verify API key is available
     if (!ELEVEN_LABS_API_KEY) {
+      console.error("❌ ELEVEN_LABS_API_KEY environment variable is not set");
       throw new Error("ELEVEN_LABS_API_KEY environment variable is not set");
     }
 
@@ -57,9 +62,9 @@ serve(async (req) => {
     };
 
     if (stream) {
-      // Use the streaming endpoint
-      const streamUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voice}/stream?optimize_streaming_latency=3`;
-      console.log("Using streaming API endpoint:", streamUrl);
+      // Use the streaming endpoint with higher optimization for lower latency
+      const streamUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voice}/stream?optimize_streaming_latency=4`;
+      console.log("🔊 Using streaming API endpoint:", streamUrl);
 
       const response = await fetch(streamUrl, {
         method: "POST",
@@ -69,18 +74,20 @@ serve(async (req) => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Error from Eleven Labs API:", errorText);
+        console.error("❌ Error from Eleven Labs API:", errorText);
         throw new Error(`Failed to stream text to speech: ${response.status} ${errorText}`);
       }
 
-      console.log("Successfully started audio streaming");
+      console.log("✅ Successfully started audio streaming");
 
-      // Stream the audio data directly to the browser
+      // Stream the audio data directly to the browser with explicit CORS and no-cache headers
       return new Response(response.body, {
         headers: {
           ...corsHeaders,
           "Content-Type": "audio/mpeg",
           "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0",
         },
       });
     } else {
@@ -96,11 +103,11 @@ serve(async (req) => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Error from Eleven Labs API:", errorText);
+        console.error("❌ Error from Eleven Labs API:", errorText);
         throw new Error(`Failed to convert text to speech: ${response.status} ${errorText}`);
       }
 
-      console.log("Successfully converted text to speech, processing audio data");
+      console.log("✅ Successfully converted text to speech, processing audio data");
 
       // Get the audio data
       const audioArrayBuffer = await response.arrayBuffer();
@@ -110,12 +117,12 @@ serve(async (req) => {
         throw new Error("Empty audio data received from Eleven Labs API");
       }
       
-      console.log(`Received audio data of size: ${audioArrayBuffer.byteLength} bytes`);
+      console.log(`✅ Received audio data of size: ${audioArrayBuffer.byteLength} bytes`);
       
       // Convert ArrayBuffer to Base64 safely
       const audioBase64 = bufferToBase64(audioArrayBuffer);
       
-      console.log(`Successfully converted audio data to Base64, length: ${audioBase64.length}`);
+      console.log(`✅ Successfully converted audio data to Base64, length: ${audioBase64.length}`);
 
       return new Response(
         JSON.stringify({
@@ -131,7 +138,7 @@ serve(async (req) => {
       );
     }
   } catch (error) {
-    console.error("Error in text-to-speech conversion:", error);
+    console.error("❌ Error in text-to-speech conversion:", error);
     return new Response(
       JSON.stringify({
         error: error.message,
