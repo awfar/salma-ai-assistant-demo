@@ -647,10 +647,10 @@ const AICallDemo = () => {
         </p>
       </div>
 
-      {/* مشغل الصوت (مخفي) - Fix the autoPlay prop here */}
+      {/* مشغل الصوت (مخفي) */}
       <AudioPlayer 
         audioSource={audioSource} 
-        autoPlay={!!(callActive && !isMuted && isSpeakerOn)}
+        autoPlay={Boolean(callActive && !isMuted && isSpeakerOn)}
         onEnded={handleAudioEnded}
         onPlay={() => setIsSpeaking(true)}
         onError={(e) => {
