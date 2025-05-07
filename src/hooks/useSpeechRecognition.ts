@@ -24,6 +24,7 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
   
   const recorderManagerRef = useRef(new MediaRecorderManager());
   const audioAnalysisRef = useRef(setupAudioLevelAnalysis());
+  const audioLevelIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const { 
     onResult, 
@@ -66,6 +67,10 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
     }
     
     console.log("✅ تم إنشاء ملف صوتي بحجم:", audioBlob.size, "بايت");
+    
+    // Log detailed audio blob information for debugging
+    speechTranscriptionService.logAudioBlobInfo(audioBlob);
+    
     if (audioBlob.size > 1000) { // Only process if there's actually audio data
       try {
         setIsProcessing(true);
@@ -105,6 +110,12 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
   const cleanupResources = useCallback(() => {
     recorderManagerRef.current.cleanup();
     audioAnalysisRef.current.cleanup();
+    
+    if (audioLevelIntervalRef.current) {
+      clearInterval(audioLevelIntervalRef.current);
+      audioLevelIntervalRef.current = null;
+    }
+    
     setAudioLevel(0);
   }, []);
 
@@ -125,6 +136,14 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
       
       // Start analyzing audio levels
       analyzeAudio(setAudioLevel);
+      
+      // Also set up a regular interval to update audio level from MediaRecorderManager
+      audioLevelIntervalRef.current = setInterval(() => {
+        const level = recorderManagerRef.current.getCurrentAudioLevel();
+        if (level > 0) {
+          setAudioLevel(level);
+        }
+      }, 100);
       
       // Create and configure media recorder
       recorderManagerRef.current.createMediaRecorder(

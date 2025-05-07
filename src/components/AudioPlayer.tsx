@@ -43,24 +43,45 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
 
     // Reset when audio source changes
     useEffect(() => {
-      if (audioRef.current) {
+      if (!audioRef.current) {
+        // Create audio element if it doesn't exist
+        audioRef.current = new Audio();
+        audioRef.current.addEventListener('play', handlePlay);
+        audioRef.current.addEventListener('pause', handlePause);
+        audioRef.current.addEventListener('ended', handleEnded);
+        audioRef.current.addEventListener('error', handleError);
+      }
+      
+      if (audioSource) {
+        console.log("🔊 تعيين مصدر الصوت:", audioSource.substring(0, 50) + "...");
+        
         // Reset player state
         audioRef.current.pause();
         setIsPlaying(false);
         setPlayAttempts(0);
         
         // Setup new source
-        if (audioSource) {
-          audioRef.current.src = audioSource;
-          
-          if (autoPlay === true) {
-            // Small delay to ensure audio loads
-            const timer = setTimeout(() => playAudio(), 100);
-            return () => clearTimeout(timer);
-          }
+        audioRef.current.src = audioSource;
+        
+        if (autoPlay === true) {
+          // Small delay to ensure audio loads
+          const timer = setTimeout(() => playAudio(), 100);
+          return () => clearTimeout(timer);
         }
       }
     }, [audioSource, autoPlay]);
+
+    // Clean up event listeners
+    useEffect(() => {
+      return () => {
+        if (audioRef.current) {
+          audioRef.current.removeEventListener('play', handlePlay);
+          audioRef.current.removeEventListener('pause', handlePause);
+          audioRef.current.removeEventListener('ended', handleEnded);
+          audioRef.current.removeEventListener('error', handleError);
+        }
+      };
+    }, []);
 
     // محاولة تشغيل الصوت مع إعادة المحاولة عند الفشل
     const playAudio = async () => {
@@ -123,7 +144,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
     };
 
     // معالجة الأخطاء
-    const handleError = (e: React.SyntheticEvent<HTMLAudioElement>) => {
+    const handleError = (e: Event) => {
       const target = e.target as HTMLAudioElement;
       console.error("❌ حدث خطأ أثناء تشغيل الصوت:", e, target.error);
       setIsPlaying(false);
@@ -138,16 +159,8 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       });
     };
 
-    return (
-      <audio 
-        ref={audioRef} 
-        onPlay={handlePlay}
-        onPause={handlePause}
-        onEnded={handleEnded}
-        onError={handleError}
-        style={{ display: "none" }}
-      />
-    );
+    // Using an empty div instead of an audio element since we manage the audio object directly
+    return <div style={{ display: "none" }}></div>;
   }
 );
 

@@ -45,7 +45,7 @@ serve(async (req) => {
   }
 
   try {
-    const { audio } = await req.json()
+    const { audio, language = 'ar' } = await req.json()
     
     if (!audio) {
       throw new Error('لم يتم توفير بيانات صوتية')
@@ -58,12 +58,16 @@ serve(async (req) => {
     
     // إعداد FormData
     const formData = new FormData()
-    const blob = new Blob([binaryAudio], { type: 'audio/webm' })
+    
+    // Determine appropriate mime type based on data
+    const mimeType = 'audio/webm';
+    const blob = new Blob([binaryAudio], { type: mimeType })
     formData.append('file', blob, 'audio.webm')
     formData.append('model', 'whisper-1')
-    formData.append('language', 'ar') // تحديد اللغة العربية
+    formData.append('language', language) // تحديد اللغة 
 
     console.log("إرسال الطلب إلى OpenAI Whisper API...");
+    console.log("مع اللغة المحددة:", language);
 
     // إرسال إلى OpenAI
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {

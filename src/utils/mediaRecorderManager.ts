@@ -6,6 +6,9 @@ export class MediaRecorderManager {
   mediaRecorder: MediaRecorder | null = null;
   stream: MediaStream | null = null;
   audioChunks: Blob[] = [];
+  private audioContext: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private dataArray: Uint8Array | null = null;
   
   /**
    * Request microphone access and set up media recorder
@@ -13,6 +16,8 @@ export class MediaRecorderManager {
   async setupMediaRecorder(): Promise<MediaStream> {
     try {
       console.log("🎤 طلب إذن الوصول إلى الميكروفون...");
+      
+      // Ensure we're requesting mic permission on user interaction
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
@@ -23,6 +28,21 @@ export class MediaRecorderManager {
       
       this.stream = stream;
       console.log("✅ تم الحصول على إذن الوصول إلى الميكروفون");
+      
+      // Create audio context for level analysis
+      try {
+        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        this.analyser = this.audioContext.createAnalyser();
+        this.analyser.fftSize = 256;
+        
+        const source = this.audioContext.createMediaStreamSource(stream);
+        source.connect(this.analyser);
+        
+        this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+        console.log("✅ تم إعداد محلل مستوى الصوت");
+      } catch (err) {
+        console.error("⚠️ تعذر إنشاء محلل مستوى الصوت:", err);
+      }
       
       return stream;
     } catch (err) {
@@ -41,16 +61,23 @@ export class MediaRecorderManager {
     onStop: () => void,
     onError: (event: Event) => void
   ): MediaRecorder {
-    const mediaRecorder = new MediaRecorder(stream, { 
-      mimeType: 'audio/webm',
-    });
+    // Use appropriate audio format with good compatibility
+    const options = {
+      mimeType: this.getSupportedMimeType(),
+      audioBitsPerSecond: 128000
+    };
+    
+    console.log("🎤 إنشاء مسجل الصوت باستخدام:", options.mimeType);
+    
+    const mediaRecorder = new MediaRecorder(stream, options);
     
     mediaRecorder.onstart = onStart;
     
     mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
+      if (event.data && event.data.size > 0) {
         this.audioChunks.push(event.data);
         onDataAvailable(event.data);
+        console.log(`🔊 تم التقاط شريحة صوتية بحجم: ${event.data.size} بايت`);
       }
     };
     
@@ -60,13 +87,37 @@ export class MediaRecorderManager {
     this.mediaRecorder = mediaRecorder;
     return mediaRecorder;
   }
+
+  /**
+   * Find a supported MIME type for audio recording
+   */
+  private getSupportedMimeType(): string {
+    const types = [
+      'audio/webm',
+      'audio/webm;codecs=opus',
+      'audio/ogg;codecs=opus',
+      'audio/mp4',
+      'audio/mpeg',
+      ''  // Empty string is the browser default
+    ];
+    
+    for (const type of types) {
+      if (!type || MediaRecorder.isTypeSupported(type)) {
+        return type;
+      }
+    }
+    
+    return '';  // Use browser default
+  }
   
   /**
    * Get collected audio chunks as a blob
    */
   getAudioBlob(): Blob | null {
     if (this.audioChunks.length === 0) return null;
-    return new Blob(this.audioChunks, { type: 'audio/webm' });
+    
+    const mimeType = this.getSupportedMimeType() || 'audio/webm';
+    return new Blob(this.audioChunks, { type: mimeType });
   }
   
   /**
@@ -74,7 +125,18 @@ export class MediaRecorderManager {
    */
   startRecording() {
     this.audioChunks = [];
-    this.mediaRecorder?.start();
+    
+    if (this.mediaRecorder) {
+      try {
+        // Try setting a smaller timeslice for more frequent ondataavailable events
+        this.mediaRecorder.start(1000); // Get data every second
+        console.log("🎙️ بدء التسجيل الصوتي");
+      } catch (err) {
+        console.error("❌ خطأ عند بدء التسجيل:", err);
+      }
+    } else {
+      console.error("❌ لم يتم تهيئة مسجل الصوت");
+    }
   }
   
   /**
@@ -82,7 +144,36 @@ export class MediaRecorderManager {
    */
   stopRecording() {
     if (this.mediaRecorder?.state !== 'inactive') {
-      this.mediaRecorder?.stop();
+      try {
+        this.mediaRecorder?.stop();
+        console.log("🛑 تم إيقاف التسجيل الصوتي");
+      } catch (err) {
+        console.error("❌ خطأ عند إيقاف التسجيل:", err);
+      }
+    }
+  }
+
+  /**
+   * Get current audio level (0-1)
+   */
+  getCurrentAudioLevel(): number {
+    if (!this.analyser || !this.dataArray) return 0;
+    
+    try {
+      this.analyser.getByteFrequencyData(this.dataArray);
+      
+      // Calculate average volume level
+      let sum = 0;
+      for (let i = 0; i < this.dataArray.length; i++) {
+        sum += this.dataArray[i];
+      }
+      const average = sum / this.dataArray.length;
+      
+      // Normalize to 0-1 range
+      return Math.min(1, average / 128);
+    } catch (err) {
+      console.error("❌ خطأ في قراءة مستوى الصوت:", err);
+      return 0;
     }
   }
   
@@ -106,6 +197,16 @@ export class MediaRecorderManager {
       }
     } catch (e) {
       console.error('Error stopping media tracks:', e);
+    }
+    
+    try {
+      if (this.audioContext) {
+        this.audioContext.close();
+        this.audioContext = null;
+        this.analyser = null;
+      }
+    } catch (e) {
+      console.error('Error closing audio context:', e);
     }
     
     this.audioChunks = [];
