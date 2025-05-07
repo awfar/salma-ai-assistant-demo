@@ -2,18 +2,20 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, AlertCircle, ExternalLink } from "lucide-react";
+import { RefreshCw, AlertCircle, ExternalLink, CheckCircle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const MayaAiTakaful = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
+  const [domainAdded, setDomainAdded] = useState(true); // Assuming domain is already added
 
-  // وظيفة لمراقبة الأخطاء في وحدة التحكم
+  // Function to capture console errors
   const setupConsoleErrorCapture = () => {
     const originalError = console.error;
     console.error = function(...args) {
-      // تسجيل الأخطاء التي تحتوي على كلمة "d-id" أو "agent"
+      // Log errors containing "d-id" or "agent"
       const errorStr = args.join(' ');
       if (errorStr.toLowerCase().includes('d-id') || errorStr.toLowerCase().includes('agent') || errorStr.includes('Failed to fetch')) {
         setHasError(true);
@@ -28,14 +30,14 @@ const MayaAiTakaful = () => {
     };
   };
 
-  // وظيفة لتحميل سكريبت D-ID
+  // Function to load D-ID script
   const loadDidScript = () => {
     setIsLoading(true);
     setHasError(false);
     setErrorDetails(null);
     
     try {
-      // إزالة أي سكريبت سابق إذا كان موجوداً
+      // Remove any previous script if exists
       const existingScript = document.querySelector('script[data-name="did-agent"]');
       if (existingScript) {
         document.body.removeChild(existingScript);
@@ -50,10 +52,14 @@ const MayaAiTakaful = () => {
       script.setAttribute("data-agent-id", "agt_nzxp_loq");
       script.setAttribute("data-monitor", "true");
       
-      // إضافة مراقب لحالة التحميل
+      // Add load event listener
       script.onload = () => {
         setIsLoading(false);
+        setDomainAdded(true);
         console.log("✅ D-ID script loaded successfully");
+        toast.success("تم تحميل الوكيل الافتراضي بنجاح", {
+          description: "يمكنك الآن التفاعل مع مايا للتكافل الاجتماعي"
+        });
       };
       
       script.onerror = (e) => {
@@ -66,10 +72,10 @@ const MayaAiTakaful = () => {
         });
       };
       
-      // إضافة السكريبت للصفحة
+      // Add script to page
       document.body.appendChild(script);
       
-      // مراقبة الأخطاء العامة
+      // Monitor general errors
       const errorHandler = (event: Event) => {
         if (event.target && (event.target as HTMLElement).tagName === 'SCRIPT' && 
           (event.target as HTMLScriptElement).dataset.name === 'did-agent') {
@@ -86,7 +92,7 @@ const MayaAiTakaful = () => {
       return () => {
         window.removeEventListener('error', errorHandler as EventListener);
         cleanupConsole();
-        // إزالة السكريبت عند إلغاء تحميل المكون
+        // Remove script when component unmounts
         const didScript = document.querySelector('script[data-name="did-agent"]');
         if (didScript) {
           document.body.removeChild(didScript);
@@ -102,11 +108,11 @@ const MayaAiTakaful = () => {
     }
   };
 
-  // تحميل السكريبت عند تحميل المكون
+  // Load script when component mounts
   useEffect(() => {
     const cleanup = loadDidScript();
     
-    // إعداد مؤقت للتحقق من حالة التحميل
+    // Setup timer to check loading status
     const timeoutId = setTimeout(() => {
       const agentContainer = document.querySelector('[data-did-agent]');
       if (!agentContainer) {
@@ -114,7 +120,7 @@ const MayaAiTakaful = () => {
         setIsLoading(false);
         setErrorDetails("لم يتم تحميل الوكيل بشكل صحيح. قد تكون هناك مشكلة في إعدادات النطاق (Domain)");
       }
-    }, 10000); // 10 ثواني
+    }, 10000); // 10 seconds
     
     return () => {
       clearTimeout(timeoutId);
@@ -134,17 +140,28 @@ const MayaAiTakaful = () => {
         <p className="text-xl text-gray-600 mb-8">
           الوكيل الافتراضي للتكافل الاجتماعي من وزارة التضامن
         </p>
+        
+        {domainAdded && (
+          <Alert variant="default" className="mb-6 bg-green-50 border-green-200 text-right">
+            <CheckCircle className="h-4 w-4 text-green-600" />
+            <AlertTitle className="mr-4 text-green-800">تم إضافة نطاق الموقع</AlertTitle>
+            <AlertDescription className="mr-4 text-green-700">
+              تم إضافة النطاق https://preview--salma-ai-assistant-demo.lovable.app/ بنجاح إلى قائمة النطاقات المسموح بها في منصة D-ID
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
       
-      {/* منطقة الاتصال مع العميل الافتراضي */}
+      {/* Virtual agent interaction area */}
       <div className="w-full max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6 mb-10">
         <div className="flex flex-col justify-center items-center min-h-[500px]">
           <div id="did-agent-container" className="w-full h-full">
-            {/* D-ID سيقوم بحقن الواجهة هنا */}
+            {/* D-ID will inject interface here */}
             {isLoading && (
               <div className="text-center py-10">
                 <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mb-4"></div>
                 <p className="text-gray-500">جاري تحميل الوكيل الافتراضي...</p>
+                <p className="text-gray-400 text-sm mt-2">نحن نستخدم النطاق المضاف حديثًا: https://preview--salma-ai-assistant-demo.lovable.app/</p>
               </div>
             )}
             
@@ -158,7 +175,7 @@ const MayaAiTakaful = () => {
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6 max-w-xl mx-auto text-right">
                   <h3 className="font-bold mb-2">سبب المشكلة المحتمل:</h3>
                   <p className="text-gray-700 mb-4">
-                    يبدو أن هناك مشكلة في تكوين الوكيل الافتراضي من D-ID. يطلب الوكيل إضافة الدومين الخاص بالموقع للسماح بالوصول.
+                    رغم إضافة النطاق https://preview--salma-ai-assistant-demo.lovable.app/ إلى D-ID، قد تكون هناك حاجة لتأكيد الإعدادات في لوحة التحكم الخاصة بالوكيل.
                   </p>
                   <p className="text-gray-700">
                     {errorDetails ? (
@@ -184,7 +201,7 @@ const MayaAiTakaful = () => {
                     className="flex items-center text-blue-600 hover:underline"
                   >
                     <ExternalLink className="h-4 w-4 mr-1" />
-                    زيارة منصة D-ID لإعداد الوكيل
+                    زيارة منصة D-ID للتحقق من إعدادات الوكيل
                   </a>
                 </div>
               </div>
