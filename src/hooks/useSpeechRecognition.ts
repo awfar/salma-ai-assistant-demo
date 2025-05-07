@@ -131,7 +131,8 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     }
   }, []);
 
-  // ***IMPORTANT CHANGE*** - Define stopListening first, without any references to startListening
+  // ***IMPORTANT CHANGE*** 
+  // Define stopListening first, without any references to startListening
   const stopListening = useCallback(() => {
     try {
       if (recognitionRef.current) {
@@ -148,10 +149,12 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       // Clear all timeouts
       if (silenceTimeoutRef.current) {
         clearTimeout(silenceTimeoutRef.current);
+        silenceTimeoutRef.current = null;
       }
       
       if (speechDetectedTimeoutRef.current) {
         clearTimeout(speechDetectedTimeoutRef.current);
+        speechDetectedTimeoutRef.current = null;
       }
       
       setAudioLevel(0);
@@ -446,7 +449,8 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     }
   };
 
-  // Public startListening function to be exposed by the hook
+  // Public startListening function exposed by the hook - this references the implementation
+  // but doesn't create a circular reference
   const startListening = useCallback(async () => {
     await startListeningImpl();
   }, [initAudioContext, measureAudioLevel, initRecognition]);
@@ -496,4 +500,3 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     hasSpeechBeenDetected
   };
 };
-
