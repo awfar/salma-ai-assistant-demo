@@ -22,33 +22,61 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const isPlayingRef = useRef(false);
     const [audioLoaded, setAudioLoaded] = useState(false);
+    const [audioPlayAttempted, setAudioPlayAttempted] = useState(false);
+    const audioSourceRef = useRef<string | undefined>(audioSource);
+    
+    // Track changes to audioSource to detect new audio
+    useEffect(() => {
+      audioSourceRef.current = audioSource;
+    }, [audioSource]);
     
     useImperativeHandle(ref, () => ({
       play: async () => {
         try {
-          if (audioRef.current) {
-            console.log("▶️ تشغيل الصوت");
-            // Reset to beginning before playing to ensure playback starts from the start
-            audioRef.current.currentTime = 0;
-            const playPromise = audioRef.current.play();
-            
-            // Handle the play promise properly
-            if (playPromise !== undefined) {
-              await playPromise;
-              isPlayingRef.current = true;
-              if (onPlay) onPlay();
-              console.log("✅ تشغيل الصوت ناجح");
-            }
+          if (!audioRef.current) {
+            console.error("❌ عنصر الصوت غير موجود");
+            return;
+          }
+          
+          console.log("▶️ محاولة تشغيل الصوت");
+          
+          // Reset to beginning before playing
+          audioRef.current.currentTime = 0;
+          setAudioPlayAttempted(true);
+          
+          // Try to play with proper error handling
+          const playPromise = audioRef.current.play();
+          
+          if (playPromise !== undefined) {
+            await playPromise;
+            isPlayingRef.current = true;
+            if (onPlay) onPlay();
+            console.log("✅ تشغيل الصوت ناجح");
+          } else {
+            console.warn("⚠️ وعد التشغيل غير معرّف");
           }
         } catch (error) {
           console.error("❌ خطأ في تشغيل الصوت:", error);
+          
+          // Check for common errors
+          const errorMessage = error instanceof Error ? error.message : "خطأ غير معروف";
+          if (errorMessage.includes("user didn't interact") || errorMessage.includes("user gesture")) {
+            console.log("👆 مطلوب تفاعل المستخدم لتشغيل الصوت");
+            
+            // Will be handled by user interaction handlers
+            document.addEventListener("click", handleUserInteraction, { once: true });
+            document.addEventListener("touchstart", handleUserInteraction, { once: true });
+          }
+          
           isPlayingRef.current = false;
           if (onError) onError(error instanceof Error ? error : new Error('فشل في تشغيل الصوت'));
         }
       },
       pause: () => {
-        if (audioRef.current) {
-          console.log("⏸️ إيقاف الصوت");
+        if (!audioRef.current) return;
+        
+        console.log("⏸️ إيقاف الصوت");
+        try {
           // Only pause if audio is actually playing
           if (!audioRef.current.paused) {
             audioRef.current.pause();
@@ -57,6 +85,8 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
           isPlayingRef.current = false;
           // تشغيل onended يدويًا للإشارة إلى التوقف التام
           if (onEnded) onEnded();
+        } catch (e) {
+          console.error("❌ خطأ أثناء إيقاف الصوت:", e);
         }
       },
       get isPlaying() {
@@ -64,207 +94,201 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       }
     }));
     
-    // Handle audio source changes - prevent automatic replaying
-    useEffect(() => {
-      if (!audioSource) return;
+    // Unified user interaction handler for audio unlocking
+    const handleUserInteraction = async () => {
+      console.log("👆 تم اكتشاف تفاعل المستخدم، محاولة فتح قفل الصوت");
       
-      const setupAudio = async () => {
-        // Create a new audio instance every time to avoid stale state issues
+      try {
+        // Create and start a silent audio context to unlock audio on mobile
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContext) {
+          const audioContext = new AudioContext();
+          const oscillator = audioContext.createOscillator();
+          oscillator.connect(audioContext.destination);
+          oscillator.start(0);
+          oscillator.stop(0.001);
+        }
+        
+        // If we have audio to play, try playing it again
+        if (audioRef.current && audioSourceRef.current && !isPlayingRef.current && audioPlayAttempted) {
+          console.log("🔄 إعادة محاولة تشغيل الصوت بعد تفاعل المستخدم");
+          
+          const playPromise = audioRef.current.play();
+          if (playPromise !== undefined) {
+            await playPromise;
+            isPlayingRef.current = true;
+            if (onPlay) onPlay();
+            console.log("✅ نجح تشغيل الصوت بعد تفاعل المستخدم");
+          }
+        }
+      } catch (e) {
+        console.error("❌ فشلت محاولة فتح قفل الصوت بعد تفاعل المستخدم:", e);
+      }
+    };
+    
+    // Handle audio source changes with better error handling
+    useEffect(() => {
+      if (!audioSource) {
+        setAudioLoaded(false);
+        return;
+      }
+      
+      console.log("🔄 تم اكتشاف تغيير في مصدر الصوت");
+      
+      const setupAudio = () => {
+        // Clean up previous audio instance
         if (audioRef.current) {
           try {
-            // Clean up previous audio instance
             audioRef.current.pause();
-            audioRef.current.src = '';
+            audioRef.current.removeAttribute('src');
             audioRef.current.load();
-            audioRef.current.onended = null;
-            audioRef.current.onerror = null;
           } catch (e) {
-            console.log("Error cleaning previous audio:", e);
+            console.error("❌ خطأ أثناء تنظيف مثيل الصوت السابق:", e);
           }
         }
         
-        audioRef.current = new Audio();
-        setAudioLoaded(false);
-        
-        // Set event listeners
-        audioRef.current.onended = () => {
+        // Create new audio element
+        const audio = new Audio();
+        audio.onended = () => {
           console.log("🔊 انتهى تشغيل الصوت");
           isPlayingRef.current = false;
           if (onEnded) onEnded();
         };
         
-        audioRef.current.onerror = (event) => {
-          console.error("❌ خطأ في الصوت:", event);
+        audio.onerror = (event) => {
+          const error = event as ErrorEvent;
+          console.error("❌ خطأ في الصوت:", error.message || "خطأ غير معروف");
           isPlayingRef.current = false;
+          
+          // Try to log more detailed error info
+          if (audio.error) {
+            console.error("❌ رمز الخطأ:", audio.error.code);
+            console.error("❌ رسالة الخطأ:", audio.error.message);
+          }
+          
           if (onError) {
-            const error = new Error("خطأ في تشغيل الصوت");
-            onError(error);
+            const errorMsg = audio.error?.message || "خطأ في تشغيل الصوت";
+            onError(new Error(errorMsg));
           }
         };
         
-        audioRef.current.onloadedmetadata = () => {
+        audio.onloadeddata = () => {
+          console.log("🔊 تم تحميل بيانات الصوت");
           setAudioLoaded(true);
-          console.log("🔊 تم تحميل بيانات الصوت بنجاح");
         };
         
-        audioRef.current.oncanplaythrough = () => {
+        audio.oncanplaythrough = () => {
           console.log("🔊 الصوت جاهز للتشغيل من البداية إلى النهاية دون توقف");
+          setAudioLoaded(true);
+          
+          // Autoplay if requested and not muted
+          if (autoPlay && !isMuted && !isPlayingRef.current) {
+            console.log("🔄 محاولة التشغيل التلقائي بعد جاهزية الصوت");
+            setTimeout(async () => {
+              try {
+                const playPromise = audio.play();
+                setAudioPlayAttempted(true);
+                
+                if (playPromise !== undefined) {
+                  await playPromise;
+                  isPlayingRef.current = true;
+                  if (onPlay) onPlay();
+                  console.log("✅ التشغيل التلقائي ناجح");
+                }
+              } catch (err) {
+                console.error("❌ فشل التشغيل التلقائي:", err);
+                
+                // Check if it's autoplay policy restriction
+                if (err instanceof Error && 
+                    (err.message.includes("user gesture") || 
+                     err.message.includes("user interaction"))) {
+                  console.log("👆 مطلوب تفاعل المستخدم للتشغيل - سيتم المحاولة عند التفاعل التالي");
+                }
+              }
+            }, 100);
+          }
         };
         
         // Set the new source
-        audioRef.current.src = audioSource;
-        audioRef.current.volume = isMuted ? 0 : volume;
-        await audioRef.current.load();
+        console.log("🎵 تعيين مصدر الصوت:", audioSource.substring(0, 50) + "...");
+        audio.src = audioSource;
+        audio.volume = isMuted ? 0 : volume;
+        audio.preload = "auto";
         
-        console.log("🔊 تم تعيين مصدر صوت جديد:", audioSource.substring(0, 50) + "...");
+        // Store the audio element
+        audioRef.current = audio;
         
-        // Auto-play if enabled and not muted, but with a small delay to ensure loading
-        if (autoPlay && !isMuted && audioLoaded) {
-          try {
-            setTimeout(async () => {
-              if (audioRef.current) {
-                console.log("▶️ تشغيل تلقائي للصوت");
-                const playPromise = audioRef.current.play();
-                
-                if (playPromise !== undefined) {
-                  try {
-                    await playPromise;
-                    isPlayingRef.current = true;
-                    if (onPlay) onPlay();
-                    console.log("✅ بدأ تشغيل الصوت بنجاح");
-                  } catch (playError) {
-                    console.error("❌ فشل الوعد بتشغيل الصوت:", playError);
-                    // حاول مرة أخرى إذا كان الخطأ بسبب تفاعل المستخدم
-                    if (playError.name === "NotAllowedError") {
-                      console.log("⚠️ يحتاج تفاعل المستخدم لتشغيل الصوت");
-                      // محاولة تشغيل الصوت يدويًا بعد التفاعل الأول مع الصفحة
-                      document.addEventListener('click', function audioClickHandler() {
-                        if (audioRef.current) {
-                          audioRef.current.play().then(() => {
-                            isPlayingRef.current = true;
-                            if (onPlay) onPlay();
-                            console.log("✅ بدأ تشغيل الصوت بعد تفاعل المستخدم");
-                          }).catch(e => console.error("❌ فشلت المحاولة اليدوية لتشغيل الصوت:", e));
-                        }
-                        document.removeEventListener('click', audioClickHandler);
-                      }, { once: true });
-                    }
-                  }
-                }
-              }
-            }, 300);
-          } catch (error) {
-            console.error("❌ فشل التشغيل التلقائي:", error);
-            isPlayingRef.current = false;
-            if (onError) onError(error instanceof Error ? error : new Error('فشل في التشغيل التلقائي للصوت'));
-          }
+        // Start loading
+        try {
+          audio.load();
+          console.log("🔊 بدأ تحميل الصوت");
+        } catch (loadErr) {
+          console.error("❌ خطأ أثناء تحميل الصوت:", loadErr);
         }
       };
       
       setupAudio();
-    }, [audioSource, autoPlay, onPlay, onError, onEnded, isMuted, volume, audioLoaded]);
+      
+    }, [audioSource, autoPlay, isMuted, volume, onEnded, onPlay, onError]);
     
-    // Handle volume changes and muting
+    // Add event listeners for user interaction to unlock audio on iOS/mobile
     useEffect(() => {
-      if (audioRef.current) {
-        audioRef.current.volume = isMuted ? 0 : volume;
-        console.log("🔊 ضبط مستوى الصوت:", isMuted ? "مكتوم" : volume);
-        
-        // If muted during playback, pause the audio
-        if (isMuted && isPlayingRef.current) {
-          audioRef.current.pause();
-          isPlayingRef.current = false;
-        }
-      }
-    }, [volume, isMuted]);
-    
-    // Fix for mobile devices: try to play audio on first user interaction
-    useEffect(() => {
-      const handleUserInteraction = async () => {
-        // Try to initialize audio context on user interaction
-        if (audioRef.current && audioSource && autoPlay && !isMuted) {
-          try {
-            // Create a silent audio context to wake up audio on iOS
-            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-            const silentBuffer = audioContext.createBuffer(1, 1, 22050);
-            const source = audioContext.createBufferSource();
-            source.buffer = silentBuffer;
-            source.connect(audioContext.destination);
-            source.start(0);
-            
-            // Now try to play the actual audio
-            const playPromise = audioRef.current.play();
-            if (playPromise !== undefined) {
-              await playPromise;
-              isPlayingRef.current = true;
-              if (onPlay) onPlay();
-              console.log("✅ بدأ تشغيل الصوت بعد تفاعل المستخدم");
-            }
-          } catch (e) {
-            console.log("محاولة تشغيل الصوت بعد تفاعل المستخدم فشلت:", e);
-          }
-          
-          // Remove listeners after first interaction
-          document.removeEventListener('touchstart', handleUserInteraction);
-          document.removeEventListener('click', handleUserInteraction);
-        }
-      };
+      console.log("🔄 إعداد معالجات تفاعل المستخدم لفتح قفل الصوت");
       
-      // Add listeners for user interaction - with higher priority than other click handlers
-      document.addEventListener('touchstart', handleUserInteraction, { once: true, capture: true });
-      document.addEventListener('click', handleUserInteraction, { once: true, capture: true });
+      // Common touch/click events that indicate user interaction
+      const events = ["touchstart", "touchend", "click", "keydown"];
       
-      return () => {
-        document.removeEventListener('touchstart', handleUserInteraction, { capture: true });
-        document.removeEventListener('click', handleUserInteraction, { capture: true });
-      };
-    }, [audioSource, autoPlay, isMuted, onPlay]);
-
-    // Create an audio unlock mechanism for iOS/Safari
-    useEffect(() => {
-      // Function to unlock audio on iOS
-      const unlockAudio = () => {
-        if (!audioRef.current) return;
-        
-        // Play and immediately pause to unlock audio on iOS
-        const promise = audioRef.current.play();
-        if (promise !== undefined) {
-          promise.then(() => {
-            // Audio is now unlocked, pause it
-            audioRef.current?.pause();
-            audioRef.current && (audioRef.current.currentTime = 0);
-            console.log("🔓 تم فتح قفل تشغيل الصوت على نظام iOS");
-          }).catch(e => {
-            console.log("لم يتم فتح قفل الصوت:", e);
-          });
-        }
-      };
-      
-      // Create and remove event listeners for audio unlock
-      const events = ['touchstart', 'touchend', 'mousedown', 'keydown'];
       events.forEach(event => {
-        document.body.addEventListener(event, unlockAudio, { once: true });
+        document.addEventListener(event, handleUserInteraction, { once: true, capture: true });
       });
       
       return () => {
         events.forEach(event => {
-          document.body.removeEventListener(event, unlockAudio);
+          document.removeEventListener(event, handleUserInteraction, { capture: true });
         });
       };
     }, []);
+    
+    // Monitor volume changes
+    useEffect(() => {
+      if (audioRef.current) {
+        audioRef.current.volume = isMuted ? 0 : volume;
+        console.log(`🔊 تم تحديث مستوى الصوت: ${isMuted ? "كتم" : volume}`);
+      }
+    }, [volume, isMuted]);
     
     // Clean up on unmount
     useEffect(() => {
       return () => {
         if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current.src = '';
-          audioRef.current.onended = null;
-          audioRef.current.onerror = null;
-          isPlayingRef.current = false;
+          try {
+            audioRef.current.pause();
+            audioRef.current.src = '';
+            audioRef.current.load();
+            isPlayingRef.current = false;
+          } catch (e) {
+            console.error("❌ خطأ أثناء التنظيف:", e);
+          }
         }
       };
     }, []);
+    
+    // Use DOM APIs to inject an audio element into the document body for iOS 
+    // compatibility - this helps with audio on Safari
+    useEffect(() => {
+      if (!audioSource) return;
+      
+      // Create a hidden audio element in the DOM for iOS Safari
+      const domAudio = document.createElement('audio');
+      domAudio.style.display = 'none';
+      domAudio.src = audioSource;
+      domAudio.preload = 'auto';
+      document.body.appendChild(domAudio);
+      
+      return () => {
+        document.body.removeChild(domAudio);
+      };
+    }, [audioSource]);
     
     return null; // Audio player is not visible
   }

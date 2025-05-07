@@ -111,9 +111,49 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
         throw new Error("لم يتم إرجاع أي بيانات صوتية");
       }
       
+      console.log("✅ تم استلام بيانات صوتية بنجاح. طول البيانات:", data.audio.length);
+      
       // Create audio URL from base64
       const audioUrl = `data:audio/mp3;base64,${data.audio}`;
-      console.log("✅ تم تحويل النص إلى كلام بنجاح");
+      console.log("✅ تم تحويل النص إلى كلام بنجاح وإنشاء رابط الصوت");
+      
+      // تحقق من صحة البيانات الصوتية قبل إرجاعها
+      if (!isValidBase64(data.audio)) {
+        console.error("❌ بيانات الصوت المستلمة ليست بتنسيق base64 صالح");
+        throw new Error("بيانات الصوت غير صالحة");
+      }
+      
+      // اختبار تحميل الصوت مسبقًا
+      try {
+        const preloadAudio = new Audio();
+        preloadAudio.src = audioUrl;
+        
+        // وضع مستمع مؤقت للتأكد من أن الصوت قابل للتشغيل
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error("انتهت مهلة تحميل الصوت"));
+          }, 3000);
+          
+          preloadAudio.oncanplaythrough = () => {
+            clearTimeout(timeout);
+            resolve();
+          };
+          
+          preloadAudio.onerror = (e) => {
+            clearTimeout(timeout);
+            reject(new Error(`فشل تحميل الصوت: ${e}`));
+          };
+          
+          // التحميل المسبق
+          preloadAudio.load();
+        });
+        
+        // تم التحميل بنجاح
+        console.log("✅ تم التحقق من صلاحية ملف الصوت للتشغيل");
+      } catch (preloadError) {
+        console.error("❌ فشل اختبار تحميل الصوت:", preloadError);
+        // نستمر على الرغم من الخطأ، لكن نسجله
+      }
       
       // Callback for start of synthesis
       callbacks?.onStart && callbacks.onStart();
@@ -133,6 +173,22 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       // Not here, as we're just returning the URL
     }
   }, [toast]);
+  
+  // التحقق من صحة البيانات بتنسيق base64
+  const isValidBase64 = (str: string): boolean => {
+    try {
+      // التحقق من أن السلسلة ليست فارغة
+      if (!str || str.trim() === '') return false;
+      
+      // التحقق من أن الطول مناسب لـ base64 (يجب أن يكون مضاعف 4)
+      if (str.length % 4 !== 0) return false;
+      
+      // التحقق من أن السلسلة تحتوي على أحرف base64 فقط
+      return /^[A-Za-z0-9+/=]+$/.test(str);
+    } catch (e) {
+      return false;
+    }
+  };
   
   return { askAssistant, textToSpeech, isLoading, isAudioLoading, cancelRequest };
 };
