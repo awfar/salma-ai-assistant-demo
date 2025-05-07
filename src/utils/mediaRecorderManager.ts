@@ -55,12 +55,16 @@ export class MediaRecorderManager {
    * Create and configure the media recorder
    */
   createMediaRecorder(
-    stream: MediaStream, 
     onStart: () => void,
     onDataAvailable: (data: Blob) => void,
     onStop: () => void,
     onError: (event: Event) => void
-  ): MediaRecorder {
+  ): MediaRecorder | null {
+    if (!this.stream) {
+      console.error("❌ لا يوجد تدفق صوتي متاح");
+      return null;
+    }
+    
     // Use appropriate audio format with good compatibility
     const options = {
       mimeType: this.getSupportedMimeType(),
@@ -69,23 +73,28 @@ export class MediaRecorderManager {
     
     console.log("🎤 إنشاء مسجل الصوت باستخدام:", options.mimeType);
     
-    const mediaRecorder = new MediaRecorder(stream, options);
-    
-    mediaRecorder.onstart = onStart;
-    
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data && event.data.size > 0) {
-        this.audioChunks.push(event.data);
-        onDataAvailable(event.data);
-        console.log(`🔊 تم التقاط شريحة صوتية بحجم: ${event.data.size} بايت`);
-      }
-    };
-    
-    mediaRecorder.onstop = onStop;
-    mediaRecorder.onerror = onError;
-    
-    this.mediaRecorder = mediaRecorder;
-    return mediaRecorder;
+    try {
+      const mediaRecorder = new MediaRecorder(this.stream, options);
+      
+      mediaRecorder.onstart = onStart;
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          this.audioChunks.push(event.data);
+          onDataAvailable(event.data);
+          console.log(`🔊 تم التقاط شريحة صوتية بحجم: ${event.data.size} بايت`);
+        }
+      };
+      
+      mediaRecorder.onstop = onStop;
+      mediaRecorder.onerror = onError;
+      
+      this.mediaRecorder = mediaRecorder;
+      return mediaRecorder;
+    } catch (err) {
+      console.error("❌ خطأ في إنشاء مسجل الصوت:", err);
+      return null;
+    }
   }
 
   /**
@@ -129,7 +138,7 @@ export class MediaRecorderManager {
     if (this.mediaRecorder) {
       try {
         // Try setting a smaller timeslice for more frequent ondataavailable events
-        this.mediaRecorder.start(1000); // Get data every second
+        this.mediaRecorder.start(500); // Get data every 500ms for more responsive waveform
         console.log("🎙️ بدء التسجيل الصوتي");
       } catch (err) {
         console.error("❌ خطأ عند بدء التسجيل:", err);
@@ -164,13 +173,28 @@ export class MediaRecorderManager {
       
       // Calculate average volume level
       let sum = 0;
-      for (let i = 0; i < this.dataArray.length; i++) {
+      const length = this.dataArray.length;
+      
+      // Log the first few values to debug
+      if (Math.random() < 0.05) { // Only log occasionally to avoid console spam
+        console.log("🔈 مستويات الصوت (عينة):", 
+          Array.from(this.dataArray).slice(0, 5).join(", "));
+      }
+      
+      for (let i = 0; i < length; i++) {
         sum += this.dataArray[i];
       }
-      const average = sum / this.dataArray.length;
+      const average = sum / length;
       
       // Normalize to 0-1 range
-      return Math.min(1, average / 128);
+      const level = Math.min(1, average / 128);
+      
+      // Log audio level occasionally
+      if (Math.random() < 0.1 && level > 0.05) {
+        console.log(`🎤 مستوى الصوت الحالي: ${level.toFixed(2)}`);
+      }
+      
+      return level;
     } catch (err) {
       console.error("❌ خطأ في قراءة مستوى الصوت:", err);
       return 0;

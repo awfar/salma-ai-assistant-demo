@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { setupAudioLevelAnalysis } from '@/utils/audioUtils';
@@ -25,6 +24,7 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
   const recorderManagerRef = useRef(new MediaRecorderManager());
   const audioAnalysisRef = useRef(setupAudioLevelAnalysis());
   const audioLevelIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const micInitializedRef = useRef(false);
   
   const { 
     onResult, 
@@ -74,13 +74,16 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
     if (audioBlob.size > 1000) { // Only process if there's actually audio data
       try {
         setIsProcessing(true);
+        console.log("🔍 جاري تحويل الصوت إلى نص...");
         const text = await speechTranscriptionService.transcribeAudio(audioBlob);
+        console.log("✅ تم الحصول على النص:", text);
         setIsProcessing(false);
         
         if (text) {
           setTranscript(text);
           if (onResult) onResult(text);
         } else {
+          console.log("⚠️ لم يتم التعرف على أي نص");
           toast({
             title: "لم نتمكن من سماعك",
             description: "الرجاء المحاولة مرة أخرى والتحدث بوضوح",
@@ -88,6 +91,7 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
           });
         }
       } catch (err) {
+        console.error("❌ خطأ في معالجة الصوت:", err);
         setIsProcessing(false);
         setError('حدث خطأ أثناء معالجة الصوت');
         toast({
@@ -98,7 +102,7 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
         if (onError) onError('حدث خطأ أثناء معالجة الصوت');
       }
     } else {
-      console.log("⚠️ الملف الصوتي صغير جدًا، يبدو أنه لم يتم التقاط أي صوت");
+      console.log("��️ الملف الصوتي صغير جدًا، يبدو أنه لم يتم التقاط أي صوت");
       toast({
         title: "لم نتمكن من سماعك",
         description: "الرجاء المحاولة مرة أخرى والتحدث بوضوح",
@@ -119,16 +123,17 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
     setAudioLevel(0);
   }, []);
 
-  // Start listening to microphone
-  const startListening = useCallback(async () => {
+  // Initialize microphone once and keep reference
+  const initializeMicrophone = useCallback(async () => {
+    if (micInitializedRef.current) {
+      console.log("🎤 الميكروفون تم تهيئته بالفعل، استخدام النسخة المخزنة");
+      return;
+    }
+
     try {
-      // Clean up any previous resources
-      cleanupResources();
+      console.log("🎤 طلب إذن الوصول إلى الميكروفون...");
       
-      setError(null);
-      setTranscript(''); // Clear previous transcript when starting to listen
-      
-      // Set up new media recorder - request permission explicitly
+      // Request microphone permission with optimized settings
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
@@ -137,11 +142,47 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
         } 
       });
       
-      // Initialize audio analyzer
-      const { analyzeAudio } = audioAnalysisRef.current;
+      // Setup the recorder manager with this stream
+      await recorderManagerRef.current.setupMediaRecorder(stream);
+      
+      // Initialize audio analyzer with this stream
       audioAnalysisRef.current.initializeAnalyzer(stream);
       
+      micInitializedRef.current = true;
+      console.log("✅ تم تهيئة الميكروفون بنجاح");
+      
+      return stream;
+    } catch (err) {
+      console.error('❌ خطأ في الوصول إلى الميكروفون:', err);
+      setError('لا يمكن الوصول إلى الميكروفون');
+      
+      if (onError) onError('لا يمكن الوصول إلى الميكروفون');
+      throw err;
+    }
+  }, [onError]);
+
+  // Start listening to microphone
+  const startListening = useCallback(async () => {
+    try {
+      // First check if we're already listening
+      if (isListening) {
+        console.log("🎤 الميكروفون نشط بالفعل");
+        return;
+      }
+      
+      // Clean up any previous resources
+      cleanupResources();
+      
+      setError(null);
+      setTranscript(''); // Clear previous transcript when starting to listen
+      
+      console.log("🎤 بدء الاستماع...");
+      
+      // Initialize microphone if not already initialized
+      const stream = await initializeMicrophone();
+      
       // Start analyzing audio levels
+      const { analyzeAudio } = audioAnalysisRef.current;
       analyzeAudio(setAudioLevel);
       
       // Also set up a regular interval to update audio level from MediaRecorderManager
@@ -154,14 +195,15 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
       
       // Create and configure media recorder
       recorderManagerRef.current.createMediaRecorder(
-        stream,
         // onStart
         () => {
           console.log("🎤 بدأ التسجيل الصوتي");
           setIsListening(true);
         },
         // onDataAvailable
-        () => {},
+        (data) => {
+          console.log(`🔊 تم التقاط شريحة صوتية بحجم: ${data.size} بايت`);
+        },
         // onStop
         processRecordedAudio,
         // onError
@@ -188,7 +230,7 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
       if (onError) onError('لا يمكن الوصول إلى الميكروفون');
       cleanupResources();
     }
-  }, [cleanupResources, onError, toast, processRecordedAudio]);
+  }, [cleanupResources, onError, toast, processRecordedAudio, isListening, initializeMicrophone]);
 
   // Stop listening
   const stopListening = useCallback(() => {
@@ -204,9 +246,24 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
     }
   }, [isListening, cleanupResources]);
 
+  // Pre-initialize microphone permission on mount
+  useEffect(() => {
+    // Try to initialize microphone permission early
+    if (!micInitializedRef.current) {
+      console.log("🎤 تهيئة إذن الميكروفون عند التحميل");
+      initializeMicrophone().catch(err => {
+        console.error("❌ فشل في الحصول على إذن الميكروفون:", err);
+      });
+    }
+    
+    return () => {
+      cleanupResources();
+    };
+  }, [initializeMicrophone, cleanupResources]);
+
   // Auto-start if requested
   useEffect(() => {
-    if (autoStart) {
+    if (autoStart && !isListening && !isProcessing) {
       console.log("🔄 بدء التسجيل التلقائي");
       startListening();
     }
@@ -214,7 +271,7 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
     return () => {
       cleanupResources();
     };
-  }, [autoStart, startListening, cleanupResources]);
+  }, [autoStart, startListening, cleanupResources, isListening, isProcessing]);
 
   return {
     isListening,

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Volume2, Volume } from "lucide-react";
 import CallTimer from "@/components/CallTimer";
@@ -38,6 +39,9 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   } | null>(null);
   const firstMessagePlayed = useRef<boolean>(false);
   const autoListenTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const maxListeningTimeRef = useRef<NodeJS.Timeout | null>(null);
+  const lastAudioLevelTimestampRef = useRef<number>(Date.now());
   
   // The AI assistant hook
   const { 
@@ -119,8 +123,36 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       }
     }
   };
+
+  // Reset silence detection when audio level changes
+  const handleAudioLevelChange = useCallback((level: number) => {
+    // If we detect sound above threshold, reset silence timeout
+    if (level > 0.05) {
+      lastAudioLevelTimestampRef.current = Date.now();
+      
+      // Clear existing silence timeout if there is one
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+        silenceTimeoutRef.current = null;
+      }
+    } else if (!silenceTimeoutRef.current) {
+      // No significant audio for a while, start silence timeout
+      const timeSinceLastSound = Date.now() - lastAudioLevelTimestampRef.current;
+      
+      // Only set silence timeout if it's been silent for a bit
+      if (timeSinceLastSound > 300) {
+        silenceTimeoutRef.current = setTimeout(() => {
+          console.log("🔇 تم اكتشاف صمت لمدة طويلة، إيقاف الاستماع");
+          if (isListening) {
+            stopListening();
+          }
+          silenceTimeoutRef.current = null;
+        }, 1500); // Stop after 1.5 seconds of silence
+      }
+    }
+  }, [isListening]);
   
-  // Speech recognition hook
+  // Speech recognition hook with silence detection
   const { 
     isListening,
     startListening,
@@ -140,6 +172,36 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     }
   });
 
+  // Update transcript and monitor audio level during listening
+  useEffect(() => {
+    if (isListening) {
+      // Update current transcript during listening
+      if (transcript) {
+        setCurrentTranscript(transcript);
+      }
+      
+      // Monitor audio level for silence detection
+      handleAudioLevelChange(audioLevel);
+      
+      // Set maximum listening time (8 seconds) as safety
+      if (!maxListeningTimeRef.current) {
+        maxListeningTimeRef.current = setTimeout(() => {
+          console.log("⏱️ تجاوز الحد الأقصى لوقت الاستماع، إيقاف الاستماع");
+          if (isListening) {
+            stopListening();
+          }
+          maxListeningTimeRef.current = null;
+        }, 8000);
+      }
+    } else {
+      // Clear timeout when not listening
+      if (maxListeningTimeRef.current) {
+        clearTimeout(maxListeningTimeRef.current);
+        maxListeningTimeRef.current = null;
+      }
+    }
+  }, [transcript, isListening, audioLevel, stopListening, handleAudioLevelChange]);
+
   // Schedule listening after a delay
   const scheduleListening = (delay: number = 500) => {
     if (autoListenTimeoutRef.current) {
@@ -153,13 +215,6 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       }
     }, delay);
   };
-
-  // Update current transcript during listening
-  useEffect(() => {
-    if (isListening && transcript) {
-      setCurrentTranscript(transcript);
-    }
-  }, [transcript, isListening]);
 
   // Handle suggested question selection
   const handleQuestionSelect = async (question: string) => {
@@ -301,8 +356,17 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     }
     stopCurrentAudio();
     
+    // Clean up all timeouts
     if (autoListenTimeoutRef.current) {
       clearTimeout(autoListenTimeoutRef.current);
+    }
+    
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+    }
+    
+    if (maxListeningTimeRef.current) {
+      clearTimeout(maxListeningTimeRef.current);
     }
   }, [isListening, stopListening, stopCurrentAudio]);
 
@@ -327,6 +391,14 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       if (autoListenTimeoutRef.current) {
         clearTimeout(autoListenTimeoutRef.current);
       }
+      
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+      }
+      
+      if (maxListeningTimeRef.current) {
+        clearTimeout(maxListeningTimeRef.current);
+      }
     };
   }, []);
 
@@ -347,6 +419,14 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       return () => clearTimeout(timer);
     }
   }, [audioSource, isSpeaking, isMuted, isSpeakerOn, handleAudioEnded]);
+
+  // Pre-initialize microphone
+  useEffect(() => {
+    // Pre-request microphone permissions
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(() => console.log("✅ تم الحصول على إذن الميكروفون مسبقًا"))
+      .catch(err => console.error("❌ خطأ في الوصول إلى الميكروفون:", err));
+  }, []);
 
   // Play welcome message on first render - ONLY ONCE
   useEffect(() => {

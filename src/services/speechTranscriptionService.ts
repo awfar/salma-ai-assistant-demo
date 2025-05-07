@@ -19,6 +19,7 @@ export const speechTranscriptionService = {
       }
       
       // Convert audio to base64
+      console.log("🔄 تحويل الصوت إلى صيغة Base64...");
       const audioBase64 = await blobToBase64(audioBlob);
       
       console.log("🔄 إرسال الصوت للتحويل إلى نص...");

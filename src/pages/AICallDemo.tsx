@@ -13,14 +13,42 @@ const AICallDemo = () => {
   const navigate = useNavigate();
   const [callActive, setCallActive] = React.useState(false);
   const [callStartTime, setCallStartTime] = React.useState<Date>(new Date());
+  const [micPermissionGranted, setMicPermissionGranted] = React.useState(false);
   const { toast } = useToast();
+  
+  // Check for microphone permission on load
+  useEffect(() => {
+    const checkMicPermission = async () => {
+      try {
+        console.log("🎤 التحقق من إذن الميكروفون...");
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const hasMic = devices.some(device => device.kind === 'audioinput');
+        
+        if (!hasMic) {
+          console.warn("⚠️ لم يتم العثور على أي ميكروفون");
+          toast({
+            title: "تحذير",
+            description: "لم يتم العثور على أي ميكروفون متصل",
+            variant: "destructive",
+            duration: 5000,
+          });
+        }
+      } catch (err) {
+        console.error("❌ خطأ في التحقق من أجهزة الإدخال:", err);
+      }
+    };
+    
+    checkMicPermission();
+  }, [toast]);
   
   // Handle starting call
   const handleStartCallClick = async () => {
     // Request microphone permission before starting the call
     try {
+      console.log("🎤 طلب إذن الوصول إلى الميكروفون...");
+      
       // Explicitly request microphone permissions with optimized parameters
-      await navigator.mediaDevices.getUserMedia({ 
+      const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
@@ -28,6 +56,10 @@ const AICallDemo = () => {
         } 
       });
       
+      // Close the stream immediately after getting permission
+      stream.getTracks().forEach(track => track.stop());
+      
+      setMicPermissionGranted(true);
       setCallActive(true);
       setCallStartTime(new Date());
       
@@ -39,6 +71,8 @@ const AICallDemo = () => {
       
     } catch (err) {
       console.error("خطأ في الوصول إلى الميكروفون:", err);
+      setMicPermissionGranted(false);
+      
       toast({
         title: "خطأ في الوصول إلى الميكروفون",
         description: "يرجى السماح بالوصول إلى الميكروفون لاستخدام المساعد الذكي",
