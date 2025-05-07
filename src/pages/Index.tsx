@@ -25,6 +25,14 @@ const Index = () => {
           >
             عرض واجهة المكالمات
           </Button>
+          
+          <Button 
+            onClick={() => navigate("/maya-ai-takaful")}
+            variant="outline"
+            className="text-lg px-8 py-6"
+          >
+            Maya Ai Takaful
+          </Button>
         </div>
 
         <div className="mt-12 p-6 bg-white rounded-lg shadow-md">
