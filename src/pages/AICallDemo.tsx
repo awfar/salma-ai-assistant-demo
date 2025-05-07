@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import SoundWave from "@/components/SoundWave";
@@ -648,7 +647,7 @@ const AICallDemo = () => {
         </p>
       </div>
 
-      {/* مشغل الصوت (مخفي) */}
+      {/* مشغل الصوت (مخفي) - Fix the autoPlay prop here */}
       <AudioPlayer 
         audioSource={audioSource} 
         autoPlay={!!(callActive && !isMuted && isSpeakerOn)}
