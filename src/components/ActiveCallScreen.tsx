@@ -1,18 +1,19 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Volume2, Volume } from "lucide-react";
+import { PhoneOff, Volume2, Volume } from "lucide-react";
 import CallTimer from "@/components/CallTimer";
 import AudioPlayer from "@/components/AudioPlayer";
 import AvatarAnimation from "@/components/AvatarAnimation";
 import CallButton from "@/components/CallButton";
-import SoundWave from "@/components/SoundWave";
 import ChatBubble from "@/components/ChatBubble";
 import TranscriptBar from "@/components/TranscriptBar";
 import SuggestedQuestions from "@/components/SuggestedQuestions";
 import { useAIAssistant } from "@/hooks/useAIAssistant";
-import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useToast } from "@/hooks/use-toast";
 import { useCallMessages } from "@/hooks/useCallMessages";
+import { speechTranscriptionService } from "@/services/speechTranscriptionService";
+import PushToTalkButton from "@/components/PushToTalkButton";
+import { createVoiceRecorder, VoiceRecorderInterface } from "@/utils/voiceRecorder";
 
 interface ActiveCallScreenProps {
   callStartTime: Date;
@@ -24,11 +25,11 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   onEndCall 
 }) => {
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
-  const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [audioSource, setAudioSource] = useState<string | undefined>();
+  const [isRecording, setIsRecording] = useState<boolean>(false);
   const [currentTranscript, setCurrentTranscript] = useState<string>("");
   const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(true);
-  const [audioMuted, setAudioMuted] = useState<boolean>(false); // State to track audio muting separately
+  const [audioMuted, setAudioMuted] = useState<boolean>(false);
+  const [audioLevel, setAudioLevel] = useState<number>(0);
   const { toast } = useToast();
   
   // References
@@ -39,11 +40,9 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     isPlaying: boolean; 
   } | null>(null);
   const firstMessagePlayed = useRef<boolean>(false);
-  const autoListenTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const maxListeningTimeRef = useRef<NodeJS.Timeout | null>(null);
-  const lastAudioLevelTimestampRef = useRef<number>(Date.now());
+  const recorderRef = useRef<VoiceRecorderInterface | null>(null);
   const processingUserInputRef = useRef<boolean>(false);
+  const noSpeechTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // The AI assistant hook
   const { 
@@ -75,24 +74,23 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     }
   }, []);
 
-  // Handle user speech detection - stop AI from talking when user speaks
-  const handleSpeechDetected = useCallback(() => {
-    console.log("🔊👂 User speech detected while AI is speaking");
-    if (isSpeaking && !processingUserInputRef.current) {
-      console.log("🛑 Interrupting AI speech to listen to user");
-      stopCurrentAudio();
-      
-      // Small delay before starting to listen again
-      setTimeout(() => {
-        if (!processingUserInputRef.current) {
-          console.log("🎤 Starting listening after interruption");
-          startListening();
-        }
-      }, 300);
-    }
-  }, [isSpeaking, stopCurrentAudio]);
+  // Initialize the voice recorder
+  useEffect(() => {
+    recorderRef.current = createVoiceRecorder({
+      onAudioLevel: (level) => {
+        setAudioLevel(level);
+      }
+    });
 
-  // Process user input (from voice or button)
+    return () => {
+      // Clean up
+      if (recorderRef.current && recorderRef.current.isRecording()) {
+        recorderRef.current.cancelRecording();
+      }
+    };
+  }, []);
+
+  // Process user input from voice recording or text
   const processUserInput = async (text: string) => {
     if (!text.trim() || processingUserInputRef.current) return;
     
@@ -100,11 +98,8 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       console.log("🔄 Processing user input:", text);
       processingUserInputRef.current = true;
       
-      // Stop any current audio and listening
+      // Stop any current audio
       stopCurrentAudio();
-      if (isListening) {
-        stopListening();
-      }
       
       // Show current transcript
       setCurrentTranscript(text.trim());
@@ -112,7 +107,6 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       // Add user message
       console.log("👤 User message:", text.trim());
       addMessage(text.trim(), "user");
-      resetTranscript();
       
       // Get response from AI assistant
       console.log("🤖 Sending request to AI assistant...");
@@ -144,7 +138,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
             setAudioSource(audioUrl);
           } else {
             console.error("❌ Failed to get audio URL");
-            handleAudioEnded(); // Call this to ensure program flow continues
+            handleAudioEnded(); 
           }
         } else {
           // If sound is disabled, skip audio phase
@@ -158,105 +152,106 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
           description: "لم نتمكن من الحصول على رد من المساعد الذكي. يرجى المحاولة مرة أخرى.",
           variant: "destructive",
         });
-        
-        // Start listening again
-        if (!isMuted) {
-          scheduleListening(1000);
-        }
       }
     } finally {
       processingUserInputRef.current = false;
     }
   };
-
-  // Speech recognition handling - directly use processUserInput
-  const handleTranscriptResult = (text: string) => {
-    processUserInput(text);
-  };
-
-  // Reset silence detection when audio level changes
-  const handleAudioLevelChange = useCallback((level: number) => {
-    // If we detect sound above threshold, reset silence timeout
-    if (level > 0.05) {
-      lastAudioLevelTimestampRef.current = Date.now();
-      
-      // Clear existing silence timeout if there is one
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current);
-        silenceTimeoutRef.current = null;
-      }
-    } 
-  }, []);
   
-  // Speech recognition hook with improved sensitivity
-  const { 
-    isListening,
-    startListening,
-    stopListening,
-    transcript,
-    isProcessing: isTranscribing,
-    error: speechError,
-    resetTranscript,
-    audioLevel,
-    hasSpeechBeenDetected
-  } = useSpeechRecognition({
-    onResult: handleTranscriptResult,
-    onListeningChange: (listening) => {
-      console.log("🎤 Listening state:", listening ? "active" : "inactive");
-    },
-    onProcessingChange: (processing) => {
-      console.log("🎤 Processing state:", processing ? "processing" : "inactive");
-    },
-    onAudioLevelChange: handleAudioLevelChange,
-    onSpeechDetected: handleSpeechDetected,
-    silenceThreshold: 0.02, // Lower threshold to detect more audio
-    silenceTimeout: 800, // Silent timeout as requested (800ms)
-    minSpeechLevel: 0.06  // Lower threshold to consider as speech
-  });
-
-  // Update transcript and monitor audio level during listening
-  useEffect(() => {
-    if (isListening) {
-      // Update current transcript during listening
-      if (transcript) {
-        console.log("🎤 Live transcript:", transcript);
-        setCurrentTranscript(transcript);
+  // Handle start of recording
+  const handleStartRecording = useCallback(async () => {
+    try {
+      if (processingUserInputRef.current) return;
+      
+      // Stop any playing audio
+      stopCurrentAudio();
+      
+      // Start recording
+      if (!recorderRef.current) {
+        recorderRef.current = createVoiceRecorder({
+          onAudioLevel: (level) => {
+            setAudioLevel(level);
+          }
+        });
       }
       
-      // Set maximum listening time (8 seconds) as safety
-      if (!maxListeningTimeRef.current) {
-        maxListeningTimeRef.current = setTimeout(() => {
-          console.log("⏱️ Max listening time reached, stopping listening");
-          if (isListening) {
-            stopListening();
-          }
-          maxListeningTimeRef.current = null;
-        }, 8000);
-      }
-    } else {
-      // Clear timeout when not listening
-      if (maxListeningTimeRef.current) {
-        clearTimeout(maxListeningTimeRef.current);
-        maxListeningTimeRef.current = null;
-      }
-    }
-  }, [transcript, isListening, stopListening]);
+      await recorderRef.current.startRecording();
+      setIsRecording(true);
+      setCurrentTranscript("جاري الاستماع...");
+      
+      // Set a timeout to check if no speech is detected
+      noSpeechTimeoutRef.current = setTimeout(() => {
+        if (audioLevel < 0.1) {
+          console.log("⚠️ No speech detected within timeout period");
+          handleStopRecording(true);
+        }
+      }, 6500); // Check just before 7 second max recording time
 
-  // Schedule listening after a delay
-  const scheduleListening = (delay: number = 500) => {
-    if (autoListenTimeoutRef.current) {
-      clearTimeout(autoListenTimeoutRef.current);
+    } catch (err) {
+      console.error("❌ Error starting recording:", err);
+      setIsRecording(false);
+      toast({
+        title: "خطأ في تسجيل الصوت",
+        description: "لم نتمكن من تشغيل الميكروفون. يرجى التأكد من السماح بالوصول.",
+        variant: "destructive",
+      });
     }
-    
-    autoListenTimeoutRef.current = setTimeout(() => {
-      if (!isListening && !isTranscribing && !isAIThinking && !isSpeaking && !isMuted && !processingUserInputRef.current) {
-        console.log("🔄 Auto-scheduling listening");
-        startListening();
+  }, [stopCurrentAudio, audioLevel]);
+  
+  // Handle end of recording
+  const handleStopRecording = useCallback(async (noSpeechDetected = false) => {
+    try {
+      if (!recorderRef.current || !recorderRef.current.isRecording()) {
+        setIsRecording(false);
+        return;
       }
-    }, delay);
-  };
+      
+      // Clear no speech timeout
+      if (noSpeechTimeoutRef.current) {
+        clearTimeout(noSpeechTimeoutRef.current);
+        noSpeechTimeoutRef.current = null;
+      }
+      
+      setIsRecording(false);
+      setCurrentTranscript("جاري معالجة الصوت...");
+      
+      // Stop the recording and get the audio blob
+      const audioBlob = await recorderRef.current.stopRecording();
+      
+      // If we detected no speech, show a message
+      if (noSpeechDetected || audioBlob.size < 1000) {
+        setCurrentTranscript("لم يتم التقاط صوت، حاول مرة أخرى");
+        setTimeout(() => {
+          setCurrentTranscript("");
+        }, 2000);
+        return;
+      }
+      
+      // Transcribe the audio
+      const text = await speechTranscriptionService.transcribeAudio(audioBlob);
+      
+      if (!text) {
+        throw new Error("Failed to transcribe speech");
+      }
+      
+      // Process the transcribed text
+      await processUserInput(text);
+      
+    } catch (err) {
+      console.error("❌ Error stopping recording:", err);
+      setIsRecording(false);
+      setCurrentTranscript("");
+      
+      toast({
+        title: "خطأ في معالجة الصوت",
+        description: "لم نتمكن من تحويل الصوت إلى نص. يرجى المحاولة مرة أخرى.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  }, [processUserInput]);
 
-  // Handle suggested question selection - use processUserInput directly
+  // Handle suggested question selection
   const handleQuestionSelect = (question: string) => {
     console.log("🖱️ Quick question clicked:", question);
     if (isSpeaking) {
@@ -264,9 +259,10 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       stopCurrentAudio();
     }
     
-    if (isListening) {
-      console.log("🛑 Stopping listening to process question");
-      stopListening();
+    if (isRecording) {
+      console.log("🛑 Stopping recording to process question");
+      recorderRef.current?.cancelRecording();
+      setIsRecording(false);
     }
     
     // Add a small delay to ensure everything is reset
@@ -275,51 +271,20 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     }, 200);
   };
 
-  // When audio ends, start listening automatically
+  // Audio source state
+  const [audioSource, setAudioSource] = useState<string | undefined>();
+
+  // When audio ends
   const handleAudioEnded = useCallback(() => {
     setIsSpeaking(false);
     setCurrentTranscript(""); // Clear transcript bar text
-    
-    if (!isMuted && firstMessagePlayed.current) {
-      console.log("🔄 Audio ended, scheduling listening");
-      // Short delay before starting to listen
-      scheduleListening(800);
-    }
-  }, [isMuted]);
-
-  // Handle mute button click - Only mute the microphone, not speaker
-  const handleMuteClick = () => {
-    const newMutedState = !isMuted;
-    setIsMuted(newMutedState);
-    
-    if (newMutedState) {
-      // If muting, stop listening only
-      if (isListening) {
-        stopListening();
-      }
-      
-      toast({
-        title: "تم كتم الميكروفون",
-        duration: 2000,
-      });
-    } else {
-      toast({
-        title: "تم تشغيل الميكروفون",
-        duration: 2000,
-      });
-      
-      // If unmuting and no audio is playing, start listening
-      if (!isSpeaking && !isListening && !isTranscribing && !isAIThinking) {
-        scheduleListening(800);
-      }
-    }
-  };
+  }, []);
 
   // Handle speaker button click - controls audio output
   const handleSpeakerClick = () => {
     const newSpeakerState = !isSpeakerOn;
     setIsSpeakerOn(newSpeakerState);
-    setAudioMuted(!newSpeakerState); // This controls the audio element muting
+    setAudioMuted(!newSpeakerState);
     
     toast({
       title: newSpeakerState ? "تم تشغيل مكبر الصوت" : "تم إيقاف مكبر الصوت",
@@ -349,155 +314,30 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     }
   }, [messages]);
   
-  // Stop listening when stopping call
+  // Clean up on unmount
   useEffect(() => {
     return () => {
-      if (isListening) {
-        stopListening();
+      if (recorderRef.current && recorderRef.current.isRecording()) {
+        recorderRef.current.cancelRecording();
       }
+      
       stopCurrentAudio();
       
-      // Clean up all timeouts
-      if (autoListenTimeoutRef.current) {
-        clearTimeout(autoListenTimeoutRef.current);
-      }
-      
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current);
-      }
-      
-      if (maxListeningTimeRef.current) {
-        clearTimeout(maxListeningTimeRef.current);
+      if (noSpeechTimeoutRef.current) {
+        clearTimeout(noSpeechTimeoutRef.current);
       }
     };
-  }, [isListening, stopListening, stopCurrentAudio]);
-
-  // Stop listening if AI is thinking or speaking
-  useEffect(() => {
-    if ((isAIThinking || isSpeaking) && isListening) {
-      stopListening();
-    }
-  }, [isAIThinking, isSpeaking, isListening, stopListening]);
-
-  // Retry on speech recognition error
-  useEffect(() => {
-    if (speechError && !isSpeaking && !isListening && !isTranscribing && !isAIThinking) {
-      console.log("Attempting to restart microphone after error:", speechError);
-      scheduleListening(2000);
-    }
-  }, [speechError, isSpeaking, isListening, isTranscribing, isAIThinking]);
-
-  // Clean up timers when unmounting
-  useEffect(() => {
-    return () => {
-      if (autoListenTimeoutRef.current) {
-        clearTimeout(autoListenTimeoutRef.current);
-      }
-      
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current);
-      }
-      
-      if (maxListeningTimeRef.current) {
-        clearTimeout(maxListeningTimeRef.current);
-      }
-    };
-  }, []);
-
-  // Retry playing audio if source exists but not playing
-  useEffect(() => {
-    if (audioSource && !isSpeaking && !audioMuted && isSpeakerOn && audioControllerRef.current) {
-      // Short delay then try playing audio again if not already playing
-      const timer = setTimeout(() => {
-        if (audioControllerRef.current && !audioControllerRef.current.isPlaying) {
-          console.log("🔄 Attempting to play audio again");
-          audioControllerRef.current.play().catch(() => {
-            console.error("❌ Failed to play audio again");
-            handleAudioEnded();
-          });
-        }
-      }, 500);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [audioSource, isSpeaking, audioMuted, isSpeakerOn, handleAudioEnded]);
-
-  // Pre-initialize microphone with force start
-  useEffect(() => {
-    // Force microphone initialization immediately
-    const initializeMic = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          } 
-        });
-        
-        console.log("✅ Microphone permission granted and initialized");
-        
-        // Create temporary audio context to analyze mic input
-        const audioContext = new AudioContext();
-        const source = audioContext.createMediaStreamSource(stream);
-        const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
-        
-        // Check if we're getting audio input
-        const testAudioLevel = () => {
-          const dataArray = new Uint8Array(analyser.frequencyBinCount);
-          analyser.getByteFrequencyData(dataArray);
-          
-          let sum = 0;
-          for (let i = 0; i < dataArray.length; i++) {
-            sum += dataArray[i];
-          }
-          const avgLevel = sum / dataArray.length / 256;
-          console.log(`🎤 Initial microphone test level: ${avgLevel.toFixed(4)}`);
-          
-          // Try to start listening after permissions are granted
-          if (!isSpeaking) {
-            setTimeout(() => {
-              console.log("🎤 Auto-start listening after mic test");
-              startListening();
-              
-              // Clean up test resources
-              source.disconnect();
-              stream.getTracks().forEach(track => track.stop());
-              audioContext.close();
-            }, 500);
-          }
-        };
-        
-        // Test mic once
-        setTimeout(testAudioLevel, 100);
-      } catch (err) {
-        console.error("❌ Error accessing microphone:", err);
-        toast({
-          title: "لم نتمكن من الوصول للميكروفون",
-          description: "يرجى السماح بالوصول إلى الميكروفون لاستخدام المساعد الذكي",
-          variant: "destructive",
-          duration: 5000,
-        });
-      }
-    };
-    
-    initializeMic();
-  }, [startListening]);
+  }, [stopCurrentAudio]);
 
   // Play welcome message on first render - ONLY ONCE
   useEffect(() => {
     // Play welcome message after a short delay
     const welcomeTimer = setTimeout(async () => {
       if (firstMessagePlayed.current) {
-        // If we've already played the welcome message, just start listening
-        console.log("🎤 Welcome message already played, starting to listen");
-        scheduleListening(800);
         return;
       }
       
-      const welcomeMessage = "أهلا بيك في وزارة التضامن الاجتماعي، معاك سلمى مساعدتك الذكية أنا هنا عشان اجاوبك على كل الاستفسارات ازاي اقدر اساعدك؟";
+      const welcomeMessage = "أهلا بيك في وزارة التضامن الاجتماعي، معاك سلمى مساعدتك الذكية أنا هنا عشان اجاوبك على كل الاستفسارات. اضغط على زر الميكروفون واستمر بالضغط عليه وانت بتتكلم.";
       console.log("🤖 Welcome message:", welcomeMessage);
       addMessage(welcomeMessage, "assistant");
       
@@ -508,9 +348,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
           onStart: () => setIsSpeaking(true),
           onEnd: () => {
             setIsSpeaking(false);
-            console.log("👋 Welcome message finished, ready to listen");
-            // Schedule listening after welcome message
-            scheduleListening(800);
+            console.log("👋 Welcome message finished");
           }
         });
         
@@ -519,7 +357,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
           // Mark first message as played to prevent repeating
           firstMessagePlayed.current = true;
         } else {
-          // If text-to-speech fails, mark as played and start listening
+          // If text-to-speech fails, mark as played
           firstMessagePlayed.current = true;
           handleAudioEnded();
         }
@@ -530,7 +368,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     }, 500);
     
     return () => clearTimeout(welcomeTimer);
-  }, []);
+  }, [textToSpeech, addMessage, isSpeakerOn, handleAudioEnded]);
 
   return (
     <div className="relative w-full max-w-md mx-auto aspect-[9/16] md:aspect-auto md:h-[80vh] overflow-hidden rounded-2xl md:rounded-3xl bg-black shadow-xl border-8 border-gray-800 flex flex-col">
@@ -560,7 +398,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
         <AvatarAnimation 
           isActive={isSpeaking} 
-          isListening={!isSpeaking && isListening}
+          isListening={isRecording}
           audioLevel={audioLevel}
         />
       </div>
@@ -569,7 +407,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       <div className="absolute bottom-32 left-0 right-0 z-20 px-4">
         <TranscriptBar 
           text={currentTranscript} 
-          isActive={Boolean(isSpeaking || (isListening && transcript))} 
+          isActive={Boolean(currentTranscript)} 
           autoHide={false}
         />
       </div>
@@ -600,46 +438,6 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         </div>
       )}
       
-      {isTranscribing && (
-        <div className="absolute bottom-40 left-0 right-0 z-10 flex justify-center">
-          <div className="bg-ministry-dark/50 backdrop-blur-sm px-4 py-2 rounded-full flex items-center gap-2">
-            <div className="text-white text-xs">جاري معالجة الصوت</div>
-            <SoundWave isActive={true} type="listening" className="h-4 w-16" />
-          </div>
-        </div>
-      )}
-      
-      {isListening && (
-        <div className="absolute top-16 right-4 flex items-center gap-2 animate-pulse">
-          <div className="flex space-x-1 rtl:space-x-reverse">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div 
-                key={i} 
-                className="w-2 h-2 bg-green-500 rounded-full animate-pulse"
-                style={{ animationDelay: `${i * 200}ms` }}
-              ></div>
-            ))}
-          </div>
-          <span className="text-xs text-white bg-green-500/80 px-2 py-0.5 rounded-full">جاري الاستماع</span>
-        </div>
-      )}
-      
-      {/* Enhanced Audio level indicator with better visibility */}
-      {isListening && (
-        <div 
-          className="absolute top-16 left-4 animate-pulse w-10 h-10 rounded-full flex items-center justify-center"
-          style={{
-            transform: `scale(${1 + audioLevel * 3.5})`, // Increased scaling for better visibility
-            opacity: Math.min(1, audioLevel + 0.5), // Higher base opacity
-            backgroundColor: `rgba(52, 211, 153, ${audioLevel * 0.9})`, // More vibrant color
-            transition: 'transform 100ms ease-out, opacity 100ms ease-out',
-            boxShadow: `0 0 ${20 * audioLevel}px rgba(52, 211, 153, ${audioLevel * 0.9})`,
-          }}
-        >
-          <div className="w-5 h-5 bg-green-400 rounded-full" />
-        </div>
-      )}
-      
       {/* Audio processing icon */}
       {isAudioLoading && (
         <div className="absolute top-16 left-4 flex items-center gap-2 animate-pulse">
@@ -652,38 +450,49 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         </div>
       )}
       
-      {/* Call control buttons - iOS style */}
+      {/* Push to Talk and Call control buttons */}
       <div className="absolute bottom-4 left-0 right-0 z-30">
         <div className="flex items-center justify-center space-x-5 rtl:space-x-reverse">
-          <CallButton 
-            type="mute" 
-            onClick={handleMuteClick} 
-            active={isMuted}
-          />
-          <CallButton 
-            type="end_call" 
-            onClick={onEndCall} 
-            className="p-5" 
-          />
+          {/* Push to talk button (bigger, in center) */}
+          <div className="relative flex-1 flex justify-center">
+            <PushToTalkButton 
+              onStartRecording={handleStartRecording} 
+              onStopRecording={() => handleStopRecording(false)}
+              isRecording={isRecording}
+              audioLevel={audioLevel}
+              disabled={isAIThinking || processingUserInputRef.current}
+            />
+          </div>
+          
+          {/* End call button */}
+          <div className="absolute right-4">
+            <CallButton 
+              type="end_call" 
+              onClick={onEndCall} 
+            />
+          </div>
+          
           {/* Speaker control button */}
-          <button
-            className={`relative flex items-center justify-center rounded-full p-4 text-white transition-all transform hover:scale-105 active:scale-95
-              ${isSpeakerOn ? 'bg-ministry-green shadow-lg shadow-green-500/30' : 'bg-gray-800 hover:bg-gray-700 shadow-md'}`}
-            onClick={handleSpeakerClick}
-            title={isSpeakerOn ? "إيقاف مكبر الصوت" : "تشغيل مكبر الصوت"}
-          >
-            {isSpeakerOn ? (
-              <Volume2 className="h-6 w-6" />
-            ) : (
-              <Volume className="h-6 w-6" />
-            )}
-            <span className="sr-only">{isSpeakerOn ? "إيقاف مكبر الصوت" : "تشغيل مكبر الصوت"}</span>
-            
-            {/* Pulse effect when active */}
-            {isSpeakerOn && (
-              <span className="absolute inset-0 rounded-full bg-ministry-green animate-ping opacity-25"></span>
-            )}
-          </button>
+          <div className="absolute left-4">
+            <button
+              className={`relative flex items-center justify-center rounded-full p-4 text-white transition-all transform hover:scale-105 active:scale-95
+                ${isSpeakerOn ? 'bg-ministry-green shadow-lg shadow-green-500/30' : 'bg-gray-800 hover:bg-gray-700 shadow-md'}`}
+              onClick={handleSpeakerClick}
+              title={isSpeakerOn ? "إيقاف مكبر الصوت" : "تشغيل مكبر الصوت"}
+            >
+              {isSpeakerOn ? (
+                <Volume2 className="h-6 w-6" />
+              ) : (
+                <Volume className="h-6 w-6" />
+              )}
+              <span className="sr-only">{isSpeakerOn ? "إيقاف مكبر الصوت" : "تشغيل مكبر الصوت"}</span>
+              
+              {/* Pulse effect when active */}
+              {isSpeakerOn && (
+                <span className="absolute inset-0 rounded-full bg-ministry-green animate-ping opacity-25"></span>
+              )}
+            </button>
+          </div>
         </div>
       </div>
       
@@ -701,8 +510,8 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
           handleAudioEnded();
         }}
         ref={setupAudioController}
-        isMuted={audioMuted} // Use separate audio mute state
-        volume={1.0} // Default to full volume, let isMuted control actual playback
+        isMuted={audioMuted}
+        volume={1.0}
       />
     </div>
   );
