@@ -362,17 +362,40 @@ const AudioPlayer = forwardRef<
   }, [hasInitialized]);
 
   return (
-    <audio
-      ref={audioRef}
-      src={audioSource}
-      muted={isMuted}
-      preload="auto"
-      crossOrigin="anonymous"
-      style={{ display: "none" }}
-      controls // Add controls for debugging (hidden but accessible)
-      playsInline // Important for iOS
-      onContextMenu={(e) => e.preventDefault()} // Prevent context menu
-    />
+    <>
+      <audio
+        ref={audioRef}
+        src={audioSource}
+        muted={isMuted}
+        preload="auto"
+        crossOrigin="anonymous"
+        style={{ display: "none" }}
+        controls // Add controls for debugging (hidden but accessible)
+        playsInline // Important for iOS
+        onContextMenu={(e) => e.preventDefault()} // Prevent context menu
+      />
+      
+      {/* Debug toggle for audio source (development only) */}
+      {process.env.NODE_ENV !== 'production' && audioSource && (
+        <div className="fixed bottom-16 right-2 z-50 opacity-70">
+          <button 
+            onClick={() => {
+              if (audioRef.current) {
+                audioRef.current.play()
+                  .then(() => console.log("✅ Manual audio play successful"))
+                  .catch(err => console.error("❌ Manual audio play failed:", err));
+              }
+            }}
+            className="bg-green-600 text-white text-xs px-2 py-1 rounded mb-1 w-full"
+          >
+            Play Audio
+          </button>
+          <div className="text-xs bg-black text-white px-2 py-1 rounded truncate max-w-[150px]">
+            Source: {audioSource ? "Set" : "None"}
+          </div>
+        </div>
+      )}
+    </>
   );
 });
 

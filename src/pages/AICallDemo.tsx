@@ -132,7 +132,7 @@ const AICallDemo = () => {
           audioContextRef.current.resume().then(() => {
             console.log("✅ AudioContext resumed on user interaction");
             // Play a verification sound
-            playVerificationSound(true);
+            playVerificationSound(false); // Play an audible sound to verify audio is working
           });
         }
       }
@@ -162,7 +162,7 @@ const AICallDemo = () => {
       console.log("🎤 Starting call and initializing audio...");
       
       // Play a sound to verify audio is working when call starts
-      await playVerificationSound(true);
+      await playVerificationSound(false); // Use audible sound for feedback
       
       // Play a silent audio to unlock audio on iOS/Safari
       const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
@@ -272,21 +272,72 @@ const AICallDemo = () => {
         </div>
       )}
       
-      {/* Initial audio unlock button (hidden but focusable) */}
+      {/* Initial audio unlock button (more visible for troubleshooting) */}
       <button 
-        className="sr-only focus:not-sr-only absolute top-0 left-0"
+        className="fixed bottom-4 left-4 z-50 bg-green-600 text-white px-3 py-1 rounded text-xs shadow-md"
         onClick={() => {
-          // Force unlock audio
+          // Force unlock audio with user feedback
+          toast({
+            title: "Audio System",
+            description: "Attempting to activate audio...",
+            duration: 2000,
+          });
+          
           if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
             audioContextRef.current.resume().then(() => {
-              console.log("✅ AudioContext resumed via hidden button");
-              playVerificationSound(true);
+              console.log("✅ AudioContext resumed via button");
+              playVerificationSound(false);
+              toast({
+                title: "Audio Activated",
+                description: "Audio system has been activated successfully.",
+                duration: 2000,
+              });
+            }).catch(err => {
+              console.error("❌ Failed to resume audio context:", err);
+              toast({
+                title: "Audio Error",
+                description: "Failed to activate audio. Try tapping the screen.",
+                variant: "destructive",
+                duration: 3000,
+              });
             });
+          } else {
+            // Initialize audio context if it doesn't exist
+            try {
+              const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+              audioContextRef.current = new AudioContext();
+              
+              // Play a test sound
+              testAudioOutput(true).then(success => {
+                if (success) {
+                  toast({
+                    title: "Audio Activated",
+                    description: "Audio system has been activated successfully.",
+                    duration: 2000,
+                  });
+                } else {
+                  toast({
+                    title: "Audio Warning",
+                    description: "Audio test failed. Check your device settings.",
+                    variant: "destructive", 
+                    duration: 3000,
+                  });
+                }
+              });
+            } catch (err) {
+              console.error("❌ Error creating AudioContext:", err);
+              toast({
+                title: "Audio Error",
+                description: "Could not initialize audio system.",
+                variant: "destructive",
+                duration: 3000,
+              });
+            }
           }
         }}
-        aria-label="Initialize audio"
+        aria-label="Activate audio"
       >
-        Click to enable audio
+        🔊 Activate Audio
       </button>
     </div>
   );
