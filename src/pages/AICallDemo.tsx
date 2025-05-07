@@ -14,6 +14,7 @@ const AICallDemo = () => {
   const [callActive, setCallActive] = React.useState(false);
   const [callStartTime, setCallStartTime] = React.useState<Date>(new Date());
   const [micPermissionGranted, setMicPermissionGranted] = React.useState(false);
+  const [audioInitialized, setAudioInitialized] = React.useState(false);
   const { toast } = useToast();
   const micInitialized = useRef(false);
   const audioContextInitialized = useRef(false);
@@ -46,16 +47,17 @@ const AICallDemo = () => {
             }
             
             audioContextInitialized.current = true;
+            setAudioInitialized(true);
             console.log("✅ Audio system successfully initialized");
             
             // Play a verification sound to ensure audio is working
             setTimeout(async () => {
-              const soundPlayed = await playVerificationSound();
+              const soundPlayed = await playVerificationSound(true);
               console.log(soundPlayed ? "✅ Audio system verified with sound" : "❌ Audio verification failed");
             }, 1000);
             
             // Test audio output
-            const audioOutputWorks = await testAudioOutput();
+            const audioOutputWorks = await testAudioOutput(true);
             console.log("🔊 Audio output test:", audioOutputWorks ? "successful" : "failed");
           } catch (err) {
             console.error("❌ Failed to initialize audio system:", err);
@@ -115,11 +117,30 @@ const AICallDemo = () => {
     // Also attach to user interaction events to help mobile browsers
     const initOnUserInteraction = () => {
       initializeAudio();
+      
+      // Play a test sound on interaction
+      if (audioContextRef.current) {
+        // Create and play a short silent sound to unlock audio on iOS/Safari
+        const silentBuffer = audioContextRef.current.createBuffer(1, 1, 22050);
+        const source = audioContextRef.current.createBufferSource();
+        source.buffer = silentBuffer;
+        source.connect(audioContextRef.current.destination);
+        source.start();
+        
+        // Try to resume the audio context if it's suspended
+        if (audioContextRef.current.state === 'suspended') {
+          audioContextRef.current.resume().then(() => {
+            console.log("✅ AudioContext resumed on user interaction");
+            // Play a verification sound
+            playVerificationSound(true);
+          });
+        }
+      }
     };
     
-    window.addEventListener('touchstart', initOnUserInteraction, { once: true });
-    window.addEventListener('click', initOnUserInteraction, { once: true });
-    window.addEventListener('keydown', initOnUserInteraction, { once: true });
+    window.addEventListener('touchstart', initOnUserInteraction);
+    window.addEventListener('click', initOnUserInteraction);
+    window.addEventListener('keydown', initOnUserInteraction);
     
     return () => {
       window.removeEventListener('touchstart', initOnUserInteraction);
@@ -141,15 +162,28 @@ const AICallDemo = () => {
       console.log("🎤 Starting call and initializing audio...");
       
       // Play a sound to verify audio is working when call starts
-      await playVerificationSound();
+      await playVerificationSound(true);
       
       // Play a silent audio to unlock audio on iOS/Safari
       const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-      const audioContext = new AudioContext();
-      const silentBuffer = audioContext.createBuffer(1, 1, 22050);
-      const source = audioContext.createBufferSource();
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContext();
+      }
+      
+      // Make sure audio context is running
+      if (audioContextRef.current.state === 'suspended') {
+        try {
+          await audioContextRef.current.resume();
+          console.log("✅ AudioContext resumed on call start");
+        } catch (err) {
+          console.error("❌ Failed to resume AudioContext:", err);
+        }
+      }
+      
+      const silentBuffer = audioContextRef.current.createBuffer(1, 1, 22050);
+      const source = audioContextRef.current.createBufferSource();
       source.buffer = silentBuffer;
-      source.connect(audioContext.destination);
+      source.connect(audioContextRef.current.destination);
       source.start();
       
       // Request microphone permission
@@ -232,10 +266,28 @@ const AICallDemo = () => {
         <div className="fixed bottom-16 left-0 right-0 flex justify-center pointer-events-none">
           <div className="bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-70">
             AudioContext: {audioContextInitialized.current ? "Initialized" : "Not initialized"} | 
-            Mic: {micPermissionGranted ? "Granted" : "Not granted"}
+            Mic: {micPermissionGranted ? "Granted" : "Not granted"} |
+            Audio: {audioInitialized ? "Ready" : "Not ready"}
           </div>
         </div>
       )}
+      
+      {/* Initial audio unlock button (hidden but focusable) */}
+      <button 
+        className="sr-only focus:not-sr-only absolute top-0 left-0"
+        onClick={() => {
+          // Force unlock audio
+          if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+            audioContextRef.current.resume().then(() => {
+              console.log("✅ AudioContext resumed via hidden button");
+              playVerificationSound(true);
+            });
+          }
+        }}
+        aria-label="Initialize audio"
+      >
+        Click to enable audio
+      </button>
     </div>
   );
 };

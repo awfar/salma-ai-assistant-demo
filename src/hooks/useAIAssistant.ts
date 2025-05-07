@@ -29,39 +29,28 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
   
   // Initialize AudioContext
   useEffect(() => {
-    // Defer creating AudioContext until there's user interaction
-    const initAudioContext = () => {
-      try {
-        if (!audioContextRef.current) {
-          console.log("🔊 Initializing AudioContext");
-          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-          audioContextRef.current = new AudioContextClass();
-          
-          // Create and play a short silent sound to unlock audio on iOS/Safari
-          const silentBuffer = audioContextRef.current.createBuffer(1, 1, 22050);
-          const source = audioContextRef.current.createBufferSource();
-          source.buffer = silentBuffer;
-          source.connect(audioContextRef.current.destination);
-          source.start(0);
-          
-          console.log("✅ AudioContext successfully created");
-        }
-      } catch (err) {
-        console.error("❌ Failed to create AudioContext:", err);
+    // Create AudioContext immediately but don't play any sound
+    try {
+      if (!audioContextRef.current) {
+        console.log("🔊 Creating AudioContext on component mount");
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        audioContextRef.current = new AudioContextClass();
+        
+        console.log("✅ AudioContext successfully created");
       }
-    };
+    } catch (err) {
+      console.error("❌ Failed to create AudioContext:", err);
+    }
 
-    // Add event handlers for user interaction
-    const handleUserInteraction = () => {
-      initAudioContext();
-      
-      // If AudioContext is suspended, resume it
+    // Explicitly resume AudioContext on user interaction
+    const resumeAudioContext = () => {
       if (audioContextRef.current && audioContextRef.current.state === "suspended") {
+        console.log("🔊 Resuming AudioContext after user interaction");
         audioContextRef.current.resume().then(() => {
-          console.log("✅ AudioContext resumed");
+          console.log("✅ AudioContext resumed successfully");
           
           // Test audio output after resuming
-          testAudioOutput().then(success => {
+          testAudioOutput(true).then(success => {
             if (success) {
               console.log("✅ Audio output test successful");
             } else {
@@ -75,17 +64,33 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
     };
 
     // Add handlers for various events that indicate user interaction
-    window.addEventListener("click", handleUserInteraction);
-    window.addEventListener("touchstart", handleUserInteraction);
-    window.addEventListener("keydown", handleUserInteraction);
+    window.addEventListener("click", resumeAudioContext);
+    window.addEventListener("touchstart", resumeAudioContext);
+    window.addEventListener("keydown", resumeAudioContext);
     
-    // Try to initialize immediately
-    initAudioContext();
+    // Create and play a silent sound to unlock audio on iOS/Safari
+    const unlockAudio = () => {
+      if (audioContextRef.current) {
+        const silentBuffer = audioContextRef.current.createBuffer(1, 1, 22050);
+        const source = audioContextRef.current.createBufferSource();
+        source.buffer = silentBuffer;
+        source.connect(audioContextRef.current.destination);
+        source.start(0);
+        console.log("✅ Played silent sound to unlock audio");
+      }
+    };
+    
+    // Try unlock audio on first load and user interaction
+    unlockAudio();
+    window.addEventListener("touchstart", unlockAudio, { once: true });
+    window.addEventListener("click", unlockAudio, { once: true });
 
     return () => {
-      window.removeEventListener("click", handleUserInteraction);
-      window.removeEventListener("touchstart", handleUserInteraction);
-      window.removeEventListener("keydown", handleUserInteraction);
+      window.removeEventListener("click", resumeAudioContext);
+      window.removeEventListener("touchstart", resumeAudioContext);
+      window.removeEventListener("keydown", resumeAudioContext);
+      window.removeEventListener("touchstart", unlockAudio);
+      window.removeEventListener("click", unlockAudio);
       
       // Clean up AudioContext when component unmounts
       if (audioContextRef.current) {
@@ -158,7 +163,7 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
     }
   }, [toast, cancelRequest]);
   
-  // New method to stream audio directly from ElevenLabs
+  // Method to stream audio directly from ElevenLabs
   const streamToSpeech = useCallback(async (text: string, callbacks?: TextToSpeechCallbacks): Promise<void> => {
     if (!text.trim()) {
       console.error("❌ Text is empty, cannot convert to speech");
@@ -175,11 +180,11 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       
       // Full URL to text-to-speech edge function
       const functionPath = '/functions/v1/text-to-speech';
-      console.log("🔊 TTS function path:", functionPath);
+      console.log("🔊 Starting text to speech with path:", functionPath);
       
-      console.log("🔊 Starting text to speech streaming:", text.substring(0, 50) + "...");
+      console.log("🔊 Converting text:", text.substring(0, 50) + "...");
 
-      // Use direct fetch to supabase function instead of invoke
+      // Use direct fetch to supabase function
       const response = await fetch(`${origin}${functionPath}`, {
         method: "POST",
         headers: {
@@ -188,8 +193,8 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
         body: JSON.stringify({ 
           text, 
           stream: true,
-          // Try different voice IDs if one doesn't work
-          voice: "pNInz6obpgDQGcFmaJgB" // Adam voice - alternate option
+          // Using Leila voice - Arabic female voice
+          voice: "Yko7PKHZNXotIFUBdGjp"
         })
       });
 
@@ -209,10 +214,16 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
         console.log("✅ Created new AudioContext for streaming");
       }
 
-      // If AudioContext is suspended, resume it
+      // Make sure audio context is in running state
       if (audioContextRef.current.state === "suspended") {
-        await audioContextRef.current.resume();
-        console.log("✅ Resumed AudioContext");
+        try {
+          console.log("⚠️ AudioContext suspended, attempting to resume");
+          await audioContextRef.current.resume();
+          console.log("✅ Successfully resumed AudioContext");
+        } catch (err) {
+          console.error("❌ Failed to resume AudioContext:", err);
+          throw new Error("Failed to resume audio playback. Please interact with the page first.");
+        }
       }
 
       // Create a reader for the stream
@@ -237,7 +248,13 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
             // Create a buffer source
             const source = audioContextRef.current.createBufferSource();
             source.buffer = audioBuffer;
-            source.connect(audioContextRef.current.destination);
+            
+            // Add a gain node to control volume
+            const gainNode = audioContextRef.current.createGain();
+            gainNode.gain.value = 1.0; // Full volume
+            
+            source.connect(gainNode);
+            gainNode.connect(audioContextRef.current.destination);
             
             // Notify that we're starting to stream audio
             if (callbacks?.onStreamStart) {
@@ -264,7 +281,6 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       
       // Audio stream complete
       callbacks?.onEnd?.();
-      return;
       
     } catch (error) {
       console.error("❌ Error in text-to-speech streaming:", error);
@@ -272,7 +288,7 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       // Try falling back to non-streaming mode
       console.log("🔄 Attempting fallback to non-streaming TTS...");
       try {
-        const audioUrl = await textToSpeech(text);
+        const audioUrl = await textToSpeech(text, callbacks);
         if (!audioUrl) {
           throw new Error("Failed to get audio URL in fallback mode");
         }
@@ -284,15 +300,14 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
           description: "Could not convert text to speech. Please check your connection and try again.",
           variant: "destructive",
         });
-      } finally {
-        callbacks?.onEnd?.();
-      }
+      } 
     } finally {
       setIsAudioLoading(false);
+      // The onEnd callback is handled by the individual methods
     }
   }, [toast]);
   
-  // Convert text to speech (old method for compatibility)
+  // Convert text to speech (non-streaming method for compatibility)
   const textToSpeech = useCallback(async (text: string, callbacks?: TextToSpeechCallbacks): Promise<string | null> => {
     try {
       setIsAudioLoading(true);
@@ -303,17 +318,15 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
         abortControllerRef.current = new AbortController();
       }
       
-      console.log("🔊 Converting text to speech:", text.substring(0, 50) + "...");
+      console.log("🔊 Converting text to speech (non-streaming):", text.substring(0, 50) + "...");
       
       // Get the current origin for building the correct endpoint URL
       const origin = window.location.origin;
-      console.log("🌐 Using origin for TTS endpoint:", origin);
       
       // Full URL to text-to-speech edge function
       const functionPath = '/functions/v1/text-to-speech';
-      console.log("🔊 TTS function path:", functionPath);
       
-      // Direct fetch to edge function without supabase client
+      // Direct fetch to edge function
       const response = await fetch(`${origin}${functionPath}`, {
         method: "POST",
         headers: {
@@ -322,7 +335,7 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
         body: JSON.stringify({ 
           text, 
           stream: false,
-          voice: "pNInz6obpgDQGcFmaJgB" // Adam voice - alternate option
+          voice: "Yko7PKHZNXotIFUBdGjp" // Leila voice - Arabic female voice
         })
       });
       
@@ -344,37 +357,6 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       // Create audio URL from base64
       const audioUrl = `data:audio/mp3;base64,${data.audio}`;
       console.log("✅ Successfully converted text to speech and created audio URL");
-      
-      // Test preloading the audio
-      try {
-        const preloadAudio = new Audio();
-        preloadAudio.src = audioUrl;
-        
-        // Set a temporary listener to make sure the audio can play
-        await new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error("Audio loading timeout"));
-          }, 3000);
-          
-          preloadAudio.oncanplaythrough = () => {
-            clearTimeout(timeout);
-            resolve();
-          };
-          
-          preloadAudio.onerror = (e) => {
-            clearTimeout(timeout);
-            reject(new Error(`Audio loading failed: ${e}`));
-          };
-          
-          // Preload
-          preloadAudio.load();
-        });
-        
-        // Successfully loaded
-        console.log("✅ Validated audio file is playable");
-      } catch (preloadError) {
-        console.error("❌ Audio preload test failed:", preloadError);
-      }
       
       return audioUrl;
     } catch (error) {

@@ -4,8 +4,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const ELEVEN_LABS_API_KEY = Deno.env.get("ELEVEN_LABS_API_KEY");
 
 // Use a verified working voice ID from ElevenLabs
-// Arabic female voice - Mimi (multilingual)
-const VOICE_ID = "EXAVITQu4vr4xnSDxMaL"; // Sarah voice ID which is more reliable
+// Arabic female voice - Leila (multilingual)
+const VOICE_ID = "Yko7PKHZNXotIFUBdGjp"; // Leila voice ID - Arabic female voice
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,7 +41,7 @@ serve(async (req) => {
       text: text,
       model_id: "eleven_multilingual_v2",
       voice_settings: {
-        stability: 0.65,
+        stability: 0.75, // Increased for more consistent output
         similarity_boost: 0.85,
         style: 0.5,
         use_speaker_boost: true,

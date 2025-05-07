@@ -1,186 +1,147 @@
 
-/**
- * Utilities for audio processing and analysis
- */
+// Utility functions for audio testing and initialization
 
 /**
- * Convert a Blob to Base64 string
+ * Tests if audio output is working
+ * @param force Force test even if it has been done before
+ * @returns Promise that resolves to true if test was successful, false otherwise
  */
-export const blobToBase64 = (blob: Blob): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      // استخلاص البيانات من الـ data URL
-      const base64Data = base64String.split(',')[1];
-      resolve(base64Data);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-};
-
-/**
- * Handle audio level analysis from an audio stream
- */
-export const setupAudioLevelAnalysis = () => {
-  const audioContextRef = { current: null as AudioContext | null };
-  const analyserRef = { current: null as AnalyserNode | null };
-  const animationFrameRef = { current: null as number | null };
+export const testAudioOutput = async (force: boolean = false): Promise<boolean> => {
+  // Track if test has been run
+  static let testRun = false;
   
-  // Initialize audio context and analyzer
-  const initializeAnalyzer = (stream: MediaStream) => {
-    try {
-      // Create AudioContext for analyzing audio level
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      audioContextRef.current = audioContext;
-      
-      // Create AnalyserNode for measuring audio level
-      const analyser = audioContext.createAnalyser();
-      analyserRef.current = analyser;
-      analyser.fftSize = 256;
-      
-      // Connect audio source to analyzer
-      const source = audioContext.createMediaStreamSource(stream);
-      source.connect(analyser);
-      
-      return { audioContext, analyser };
-    } catch (error) {
-      console.error("Error initializing audio analyzer:", error);
-      return { audioContext: null, analyser: null };
-    }
-  };
+  // Don't run the test more than once unless forced
+  if (testRun && !force) {
+    console.log("Audio test already run, skipping");
+    return true;
+  }
   
-  // Analyze audio levels from the stream
-  const analyzeAudio = (
-    callback: (level: number) => void
-  ) => {
-    if (!analyserRef.current) return;
-    
-    try {
-      const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
-      analyserRef.current.getByteFrequencyData(dataArray);
-      
-      // Calculate average audio level
-      let sum = 0;
-      for (const value of dataArray) {
-        sum += value;
-      }
-      const avg = sum / dataArray.length;
-      
-      // Normalize level between 0 and 1
-      const normalizedLevel = Math.min(1, avg / 128);
-      callback(normalizedLevel);
-      
-      animationFrameRef.current = requestAnimationFrame(() => analyzeAudio(callback));
-    } catch (error) {
-      console.error("Error analyzing audio:", error);
-      callback(0);
-    }
-  };
-  
-  // Cleanup resources
-  const cleanup = () => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-
-    if (audioContextRef.current) {
-      try {
-        audioContextRef.current.close();
-        audioContextRef.current = null;
-        analyserRef.current = null;
-      } catch (e) {
-        console.error('Error closing audio context:', e);
-      }
-    }
-  };
-  
-  return {
-    initializeAnalyzer,
-    analyzeAudio,
-    cleanup,
-    refs: { audioContextRef, analyserRef, animationFrameRef }
-  };
-};
-
-// Test audio output
-export const testAudioOutput = async (): Promise<boolean> => {
   try {
-    console.log("🔊 Testing audio output capability...");
-    // Create a short beep sound to test audio output
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    
-    // Ensure audio context is running
-    if (audioContext.state === "suspended") {
-      await audioContext.resume();
+    // Create an AudioContext
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) {
+      console.error("AudioContext not supported in this browser");
+      return false;
     }
     
+    const audioContext = new AudioContext();
+    
+    // Try to resume the AudioContext if it's suspended
+    if (audioContext.state === 'suspended') {
+      try {
+        await audioContext.resume();
+      } catch (err) {
+        console.error("Failed to resume AudioContext", err);
+        return false;
+      }
+    }
+    
+    // Create a short beep sound
     const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
     oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(440, audioContext.currentTime); // A4 note
-    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime); // Low volume
+    oscillator.frequency.setValueAtTime(440, audioContext.currentTime); // 440 Hz
     
+    // Create a gain node to control volume
+    const gainNode = audioContext.createGain();
+    gainNode.gain.setValueAtTime(0.05, audioContext.currentTime); // Start very quiet
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.5); // Fade out
+    
+    // Connect nodes: oscillator -> gain -> destination (speakers)
     oscillator.connect(gainNode);
     gainNode.connect(audioContext.destination);
     
-    // Start and stop a short beep
-    oscillator.start();
-    console.log("🔊 Audio test tone started...");
+    // Play sound briefly
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.5); // 0.5 second duration
     
-    // Stop after 300ms
-    await new Promise(resolve => setTimeout(resolve, 300));
-    oscillator.stop();
+    console.log("Audio test beep played");
+    testRun = true;
     
-    // Clean up
-    await audioContext.close();
+    // Cleanup
+    setTimeout(() => {
+      audioContext.close().catch(err => console.error("Error closing AudioContext:", err));
+    }, 1000);
     
-    console.log("✅ Audio output test completed successfully");
     return true;
-  } catch (error) {
-    console.error("❌ Error testing audio output:", error);
+  } catch (err) {
+    console.error("Audio output test failed:", err);
     return false;
   }
 };
 
-// Play a sound to verify audio is working
-export const playVerificationSound = async (): Promise<boolean> => {
+/**
+ * Plays a verification sound to test audio system
+ * @param silent If true, play a nearly silent sound (for background tests)
+ * @returns Promise that resolves to true if sound was played, false otherwise
+ */
+export const playVerificationSound = async (silent: boolean = false): Promise<boolean> => {
   try {
-    console.log("🔊 Playing verification sound...");
+    // Create an AudioContext
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) {
+      console.error("AudioContext not supported in this browser");
+      return false;
+    }
     
-    // Create an Audio element
-    const audio = new Audio();
+    const audioContext = new AudioContext();
     
-    // Create a simple beep tone
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    const dest = audioContext.createMediaStreamDestination();
+    // Try to resume the AudioContext if it's suspended
+    if (audioContext.state === 'suspended') {
+      try {
+        await audioContext.resume();
+      } catch (err) {
+        console.error("Failed to resume AudioContext", err);
+        return false;
+      }
+    }
     
-    // Configure the oscillator
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime); // C5
-    gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+    // Create a verification sound - either silent or audible
+    if (silent) {
+      // Create silent sound
+      const buffer = audioContext.createBuffer(1, audioContext.sampleRate * 0.2, audioContext.sampleRate);
+      const source = audioContext.createBufferSource();
+      source.buffer = buffer;
+      
+      // Connect with very low gain
+      const gainNode = audioContext.createGain();
+      gainNode.gain.value = 0.01; // Nearly silent
+      
+      source.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      source.start();
+      
+      // Cleanup
+      setTimeout(() => {
+        audioContext.close().catch(err => console.error("Error closing AudioContext:", err));
+      }, 300);
+    } else {
+      // Create a short ping sound
+      const oscillator = audioContext.createOscillator();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+      
+      // Create a gain node for volume
+      const gainNode = audioContext.createGain();
+      gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3);
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.3);
+      
+      // Cleanup
+      setTimeout(() => {
+        audioContext.close().catch(err => console.error("Error closing AudioContext:", err));
+      }, 500);
+    }
     
-    // Connect nodes
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    gainNode.connect(dest);
-    
-    // Start & stop
-    oscillator.start();
-    await new Promise(resolve => setTimeout(resolve, 500));
-    oscillator.stop();
-    await audioContext.close();
-    
-    console.log("✅ Verification sound played successfully");
+    console.log(`Verification sound played (silent: ${silent})`);
     return true;
-  } catch (error) {
-    console.error("❌ Error playing verification sound:", error);
+  } catch (err) {
+    console.error("Failed to play verification sound:", err);
     return false;
   }
 };
