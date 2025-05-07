@@ -100,7 +100,7 @@ const AICallDemo = () => {
     if (!text.trim()) return;
     
     // إضافة رسالة المستخدم
-    console.log("👤 ر��الة المستخدم:", text.trim());
+    console.log("👤 ر���الة المستخدم:", text.trim());
     addMessage(text.trim(), "user");
     resetTranscript();
     
