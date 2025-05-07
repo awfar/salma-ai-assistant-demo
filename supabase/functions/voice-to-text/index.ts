@@ -69,8 +69,10 @@ serve(async (req) => {
     const blob = new Blob([binaryAudio], { type: 'audio/mp3' })
     formData.append('file', blob, 'audio.mp3')
     formData.append('model', 'whisper-1')
-    formData.append('language', language) // تحديد اللغة 
+    formData.append('language', language) // تحديد اللغة العربية صراحة
     formData.append('response_format', 'json')
+    formData.append('temperature', '0.0') // قيمة منخفضة للحصول على دقة أعلى
+    formData.append('prompt', 'هذا تسجيل صوتي باللغة العربية يحتوي على أسئلة واستفسارات متعلقة ببرنامج تكافل وكرامة ووزارة التضامن الاجتماعي المصرية') // توجيه السياق للمساعدة في الدقة
 
     console.log("إرسال الطلب إلى OpenAI Whisper API...");
     console.log("مع اللغة المحددة:", language);

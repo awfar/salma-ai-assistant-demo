@@ -46,11 +46,11 @@ export const speechTranscriptionService = {
       
       console.log("🔄 إرسال الصوت للتحويل إلى نص...", "طول البيانات:", audioBase64.length);
       
-      // Call the Supabase Edge Function
+      // Call the Supabase Edge Function with explicit Arabic language setting
       const { data, error } = await supabase.functions.invoke('voice-to-text', {
         body: { 
           audio: audioBase64,
-          language: "ar" // Explicitly set Arabic language
+          language: "ar" // تحديد اللغة العربية بشكل واضح
         }
       });
 
@@ -65,8 +65,9 @@ export const speechTranscriptionService = {
       }
 
       if (data && data.text) {
-        console.log("✅ تم تحويل الصوت إلى نص بنجاح:", data.text);
-        return data.text.trim();
+        const cleanedText = this.postProcessArabicText(data.text);
+        console.log("✅ تم تحويل الصوت إلى نص بنجاح:", cleanedText);
+        return cleanedText;
       } else {
         console.error('❌ لم يتم العثور على نص في الاستجابة', data);
         throw new Error('لم نتمكن من تحويل الصوت إلى نص. يرجى المحاولة مرة أخرى.');
@@ -75,6 +76,32 @@ export const speechTranscriptionService = {
       console.error('❌ خطأ في معالجة الصوت:', err);
       throw err;
     }
+  },
+  
+  /**
+   * Performs post-processing on Arabic text to improve quality
+   */
+  postProcessArabicText(text: string): string {
+    // Remove extra spaces
+    let processed = text.trim().replace(/\s+/g, ' ');
+    
+    // Fix common Arabic transcription issues
+    const replacements: Record<string, string> = {
+      'تكافول': 'تكافل',
+      'كرامه': 'كرامة',
+      'وذاره': 'وزارة',
+      'وزاره': 'وزارة',
+      'التضامن الإجتماعي': 'التضامن الاجتماعي',
+      'التضامن الاجتماعى': 'التضامن الاجتماعي',
+      // Add more common replacements as needed
+    };
+    
+    // Apply replacements
+    for (const [incorrect, correct] of Object.entries(replacements)) {
+      processed = processed.replace(new RegExp(incorrect, 'gi'), correct);
+    }
+    
+    return processed;
   },
   
   /**

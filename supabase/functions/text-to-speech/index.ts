@@ -44,8 +44,10 @@ serve(async (req) => {
           text: text,
           model_id: "eleven_multilingual_v2",
           voice_settings: {
-            stability: 0.65,
-            similarity_boost: 0.9,
+            stability: 0.7,  // زيادة الاستقرار قليلاً
+            similarity_boost: 0.8,  // خفض قليلاً لمزيد من الطبيعية
+            style: 0.35,  // إضافة المزيد من النمط
+            use_speaker_boost: true,  // تحسين جودة الصوت
           },
         }),
       }
