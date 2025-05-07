@@ -17,11 +17,15 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
   const { toast } = useToast();
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
   
   const { 
     onResult, 
@@ -45,6 +49,27 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
       onProcessingChange(isProcessing);
     }
   }, [isProcessing, onProcessingChange]);
+
+  // تحليل مستوى الصوت
+  const analyzeAudio = useCallback(() => {
+    if (!analyserRef.current) return;
+    
+    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+    analyserRef.current.getByteFrequencyData(dataArray);
+    
+    // حساب متوسط قوة الصوت
+    let sum = 0;
+    for (const value of dataArray) {
+      sum += value;
+    }
+    const avg = sum / dataArray.length;
+    
+    // تعديل المستوى من 0 إلى 1
+    const normalizedLevel = Math.min(1, avg / 128);
+    setAudioLevel(normalizedLevel);
+    
+    animationFrameRef.current = requestAnimationFrame(analyzeAudio);
+  }, []);
 
   // تحويل الصوت إلى نص باستخدام Supabase Edge Function
   const transcribeAudio = async (audioBlob: Blob) => {
@@ -150,7 +175,23 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
       }
     }
 
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+        analyserRef.current = null;
+      } catch (e) {
+        console.error('Error closing audio context:', e);
+      }
+    }
+
     audioChunksRef.current = [];
+    setAudioLevel(0);
   }, []);
 
   // بدء الاستماع للميكروفون
@@ -173,6 +214,22 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
       
       streamRef.current = stream;
       console.log("✅ تم الحصول على إذن الوصول إلى الميكروفون");
+      
+      // إنشاء AudioContext لتحليل مستوى الصوت
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      
+      // إنشاء AnalyserNode لقياس مستوى الصوت
+      const analyser = audioContext.createAnalyser();
+      analyserRef.current = analyser;
+      analyser.fftSize = 256;
+      
+      // توصيل مصدر الصوت بالمحلل
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+      
+      // بدء تحليل مستوى الصوت
+      analyzeAudio();
       
       const mediaRecorder = new MediaRecorder(stream, { 
         mimeType: 'audio/webm',
@@ -241,7 +298,7 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
       if (onError) onError('لا يمكن الوصول إلى الميكروفون');
       cleanupResources();
     }
-  }, [cleanupResources, onError, toast]);
+  }, [cleanupResources, onError, toast, analyzeAudio]);
 
   // إيقاف الاستماع
   const stopListening = useCallback(() => {
@@ -276,6 +333,7 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
     transcript,
     error,
     isProcessing,
+    audioLevel,
     resetTranscript: () => setTranscript('')
   };
 };

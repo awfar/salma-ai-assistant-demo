@@ -1,16 +1,19 @@
 
 import React, { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
+import SoundWave from "./SoundWave";
 
 interface AvatarAnimationProps {
   isActive?: boolean;
   isListening?: boolean;
+  audioLevel?: number;
   className?: string;
 }
 
 const AvatarAnimation: React.FC<AvatarAnimationProps> = ({ 
   isActive = false, 
   isListening = false,
+  audioLevel = 0,
   className 
 }) => {
   const avatarRef = useRef<HTMLDivElement>(null);
@@ -194,19 +197,12 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
         </div>
       </div>
       
-      {/* حالة الاستماع - محسنة مع تأثير نبض */}
+      {/* حالة الاستماع - محسنة مع تأثير موجات الصوت */}
       {isListening && (
-        <div className="absolute top-8 right-8 flex items-center gap-2 animate-pulse">
-          <div className="flex space-x-1 rtl:space-x-reverse">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div 
-                key={i} 
-                className="w-2 h-2 bg-green-500 rounded-full animate-pulse"
-                style={{ animationDelay: `${i * 200}ms` }}
-              ></div>
-            ))}
+        <div className="absolute bottom-16 flex items-center justify-center w-full">
+          <div className="flex items-center justify-center bg-green-500/20 backdrop-blur-sm p-2 rounded-full">
+            <SoundWave isActive={true} type="listening" className="h-8 w-20" audioLevel={audioLevel} />
           </div>
-          <span className="text-xs text-white bg-green-500/80 px-2 py-0.5 rounded-full">جاري الاستماع</span>
         </div>
       )}
     </div>

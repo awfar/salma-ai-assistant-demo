@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import SoundWave from "@/components/SoundWave";
@@ -68,7 +69,8 @@ const AICallDemo = () => {
     transcript,
     isProcessing: isTranscribing,
     error: speechError,
-    resetTranscript
+    resetTranscript,
+    audioLevel
   } = useSpeechRecognition({
     onResult: handleTranscriptResult,
     onListeningChange: (listening) => {
@@ -99,7 +101,7 @@ const AICallDemo = () => {
     if (!text.trim()) return;
     
     // إضافة رسالة المستخدم
-    console.log("👤 رسالة المست��دم:", text.trim());
+    console.log("👤 رسالة المستخدم:", text.trim());
     addMessage(text.trim(), "user");
     resetTranscript();
     
@@ -211,7 +213,7 @@ const AICallDemo = () => {
         handleAudioEnded();
       }
     } else {
-      // بدء الاس����ماع مرة أخرى
+      // بدء الاستماع مرة أخرى
       if (callActive && !isMuted) {
         scheduleListening(1000);
       }
@@ -229,7 +231,13 @@ const AICallDemo = () => {
   const handleStartCallClick = async () => {
     // طلب إذن الميكروفون قبل بدء المكالمة
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        } 
+      });
       
       setCallActive(true);
       setCallStartTime(new Date());
@@ -326,7 +334,7 @@ const AICallDemo = () => {
     }
   }, [isAIThinking, isSpeaking, isListening, stopListening]);
 
-  // معالجة النقر على زر كتم ا��صوت
+  // معالجة النقر على زر كتم الصوت
   const handleMuteClick = () => {
     setIsMuted(!isMuted);
     
@@ -518,7 +526,8 @@ const AICallDemo = () => {
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
                 <AvatarAnimation 
                   isActive={isSpeaking} 
-                  isListening={!isSpeaking && isListening && callActive} 
+                  isListening={!isSpeaking && isListening && callActive}
+                  audioLevel={audioLevel}
                 />
               </div>
               
@@ -527,6 +536,7 @@ const AICallDemo = () => {
                 <TranscriptBar 
                   text={currentTranscript} 
                   isActive={isSpeaking || (isListening && transcript)} 
+                  autoHide={true}
                 />
               </div>
               

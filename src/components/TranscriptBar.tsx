@@ -6,12 +6,16 @@ interface TranscriptBarProps {
   text: string;
   isActive: boolean;
   className?: string;
+  autoHide?: boolean;
+  hideDelay?: number;
 }
 
 const TranscriptBar: React.FC<TranscriptBarProps> = ({
   text,
   isActive,
-  className
+  className,
+  autoHide = false,
+  hideDelay = 4000
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   
@@ -20,11 +24,13 @@ const TranscriptBar: React.FC<TranscriptBarProps> = ({
       setIsVisible(true);
       
       // إخفاء النص تلقائيًا بعد انتهاء التحدث بثانية أو ثانيتين
-      const timer = setTimeout(() => {
-        setIsVisible(false);
-      }, 4000);
-      
-      return () => clearTimeout(timer);
+      if (autoHide) {
+        const timer = setTimeout(() => {
+          setIsVisible(false);
+        }, hideDelay);
+        
+        return () => clearTimeout(timer);
+      }
     } else if (!isActive) {
       // Add a slight delay before hiding when isActive becomes false
       const timer = setTimeout(() => {
@@ -33,7 +39,7 @@ const TranscriptBar: React.FC<TranscriptBarProps> = ({
       
       return () => clearTimeout(timer);
     }
-  }, [text, isActive]);
+  }, [text, isActive, autoHide, hideDelay]);
   
   if (!text) return null;
   
