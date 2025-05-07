@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -62,8 +63,10 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         // Setup new source
         audioRef.current.src = audioSource;
         
-        // Ensure autoPlay is treated as a boolean
-        if (autoPlay === true) {
+        // Ensure autoPlay is treated as a strict boolean
+        const shouldAutoPlay = Boolean(autoPlay);
+        
+        if (shouldAutoPlay) {
           // Small delay to ensure audio loads
           const timer = setTimeout(() => playAudio(), 100);
           return () => clearTimeout(timer);
@@ -71,7 +74,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       }
     }, [audioSource, autoPlay]);
 
-    // محاولة تشغيل الصوت مع إعادة المحاولة عند الفشل
+    // Attempt to play audio with retry on failure
     const playAudio = async () => {
       if (!audioRef.current || !audioSource) return;
 
@@ -89,11 +92,11 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       } catch (e) {
         console.error("❌ خطأ في تشغيل الصوت:", e);
         
-        // إعادة المحاولة إذا كان ذلك ممكنًا
+        // Retry if possible
         if (playAttempts < maxPlayAttempts) {
           console.log(`⚠️ محاولة تشغيل الصوت ${playAttempts + 1}/${maxPlayAttempts}`);
           setPlayAttempts(prev => prev + 1);
-          // زيادة الفترة الزمنية بين المحاولات
+          // Increase delay between attempts
           setTimeout(playAudio, 500 * (playAttempts + 1));
         } else {
           console.error("❌ فشل تشغيل الصوت بعد عدة محاولات");
@@ -111,27 +114,27 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       }
     };
 
-    // عند بدء التشغيل
+    // On play
     const handlePlay = () => {
       console.log("🎵 بدأ تشغيل الصوت");
       setIsPlaying(true);
       if (onPlay) onPlay();
     };
 
-    // عند إيقاف التشغيل
+    // On pause
     const handlePause = () => {
       console.log("⏸️ توقف تشغيل الصوت");
       setIsPlaying(false);
     };
 
-    // عند انتهاء الصوت
+    // On ended
     const handleEnded = () => {
       console.log("🏁 انتهى تشغيل الصوت");
       setIsPlaying(false);
       if (onEnded) onEnded();
     };
 
-    // معالجة الأخطاء
+    // Handle errors
     const handleError = (e: Event) => {
       const target = e.target as HTMLAudioElement;
       console.error("❌ حدث خطأ أثناء تشغيل الصوت:", e, target.error);
