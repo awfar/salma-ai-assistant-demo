@@ -163,18 +163,16 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       console.log("🔊 Starting text to speech streaming:", text.substring(0, 50) + "...");
       callbacks?.onStart?.();
 
-      // Call the text-to-speech stream function
-      const { data: supabaseData } = await supabase.auth.getSession();
-      const accessToken = supabaseData.session?.access_token;
+      // Get the authentication session
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
       
-      // Get the current URL to determine our Supabase project ID
-      const { protocol, host } = window.location;
-      
-      // Determine if localhost or production
+      // Get the Supabase project URL
+      const { host, protocol } = window.location;
       const baseUrl = host.includes('localhost')
         ? `${protocol}//${host}`
         : `${protocol}//${host}`;
-        
+      
       const endpoint = `${baseUrl}/functions/v1/text-to-speech`;
       
       console.log("🔄 Calling text-to-speech endpoint at:", endpoint);

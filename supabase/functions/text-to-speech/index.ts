@@ -31,6 +31,11 @@ serve(async (req) => {
     console.log("Using ElevenLabs voice ID:", voice);
     console.log("Using streaming mode:", stream);
 
+    // Verify API key is available
+    if (!ELEVEN_LABS_API_KEY) {
+      throw new Error("ELEVEN_LABS_API_KEY environment variable is not set");
+    }
+
     // Common request settings
     const requestBody = JSON.stringify({
       text: text,
@@ -46,7 +51,7 @@ serve(async (req) => {
     const headers = {
       "Accept": stream ? "audio/mpeg" : "audio/mpeg",
       "Content-Type": "application/json",
-      "xi-api-key": ELEVEN_LABS_API_KEY || "",
+      "xi-api-key": ELEVEN_LABS_API_KEY,
     };
 
     if (stream) {
