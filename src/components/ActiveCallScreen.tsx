@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Volume2, Volume } from "lucide-react";
 import CallTimer from "@/components/CallTimer";
@@ -438,7 +437,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         return;
       }
       
-      const welcomeMessage = "أهلا بيك في وزارة التضامن تكافل معاك سلمى مساعدتك الذكية أنا هنا عشان اجاوبك على كل الاستفسارات ازاي اقدر اساعدك؟";
+      const welcomeMessage = "أهلا بيك في وزارة التضامن الاجتماعي، معاك سلمى مساعدتك الذكية أنا هنا عشان اجاوبك على كل الاستفسارات ازاي اقدر اساعدك؟";
       addMessage(welcomeMessage, "assistant");
       
       // Convert text to speech

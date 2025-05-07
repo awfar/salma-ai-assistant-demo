@@ -1,287 +1,240 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useToast } from '@/hooks/use-toast';
-import { setupAudioLevelAnalysis } from '@/utils/audioUtils';
-import { speechTranscriptionService } from '@/services/speechTranscriptionService';
-import { MediaRecorderManager } from '@/utils/mediaRecorderManager';
 
-interface SpeechRecognitionOptions {
-  onResult?: (text: string) => void;
-  onError?: (error: string) => void;
-  autoStart?: boolean;
+interface UseSpeechRecognitionOptions {
+  onResult?: (transcript: string) => void;
+  onListeningChange?: (listening: boolean) => boolean | void;
+  onProcessingChange?: (processing: boolean) => void;
+  onAudioLevelChange?: (level: number) => void;
   language?: string;
-  onListeningChange?: (isListening: boolean) => void;
-  onProcessingChange?: (isProcessing: boolean) => void;
 }
 
-export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
+export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) => {
+  const {
+    onResult,
+    onListeningChange,
+    onProcessingChange,
+    onAudioLevelChange,
+    language = 'ar-EG',
+  } = options;
+
+  // States
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
-  const { toast } = useToast();
+  const [error, setError] = useState<Error | null>(null);
   
-  const recorderManagerRef = useRef(new MediaRecorderManager());
-  const audioAnalysisRef = useRef(setupAudioLevelAnalysis());
-  const audioLevelIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const micInitializedRef = useRef(false);
+  // References
+  const recognitionRef = useRef<any>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
   
-  const { 
-    onResult, 
-    onError, 
-    autoStart = false, 
-    language = 'ar',
-    onListeningChange,
-    onProcessingChange
-  } = options || {};
-
-  // Update external listening state
-  useEffect(() => {
-    if (onListeningChange) {
-      onListeningChange(isListening);
-    }
-  }, [isListening, onListeningChange]);
-
-  // Update external processing state
-  useEffect(() => {
-    if (onProcessingChange) {
-      onProcessingChange(isProcessing);
-    }
-  }, [isProcessing, onProcessingChange]);
-
-  // Process recorded audio
-  const processRecordedAudio = useCallback(async () => {
-    console.log("🎤 توقف التسجيل الصوتي، جاري معالجة البيانات...");
-    setIsListening(false);
-    
-    const audioBlob = recorderManagerRef.current.getAudioBlob();
-    
-    if (!audioBlob) {
-      console.log("⚠️ لم يتم التقاط أي بيانات صوتية");
-      toast({
-        title: "لم يتم التقاط أي صوت",
-        description: "الرجاء التأكد من أن الميكروفون يعمل بشكل صحيح",
-        variant: "default",
-      });
-      return;
-    }
-    
-    console.log("✅ تم إنشاء ملف صوتي بحجم:", audioBlob.size, "بايت");
-    
-    // Log detailed audio blob information for debugging
-    speechTranscriptionService.logAudioBlobInfo(audioBlob);
-    
-    if (audioBlob.size > 1000) { // Only process if there's actually audio data
-      try {
-        setIsProcessing(true);
-        console.log("🔍 جاري تحويل الصوت إلى نص...");
-        const text = await speechTranscriptionService.transcribeAudio(audioBlob);
-        console.log("✅ تم الحصول على النص:", text);
-        setIsProcessing(false);
-        
-        if (text) {
-          setTranscript(text);
-          if (onResult) onResult(text);
-        } else {
-          console.log("⚠️ لم يتم التعرف على أي نص");
-          toast({
-            title: "لم نتمكن من سماعك",
-            description: "الرجاء المحاولة مرة أخرى والتحدث بوضوح",
-            variant: "default",
-          });
-        }
-      } catch (err) {
-        console.error("❌ خطأ في معالجة الصوت:", err);
-        setIsProcessing(false);
-        setError('حدث خطأ أثناء معالجة الصوت');
-        toast({
-          title: "خطأ في معالجة الصوت",
-          description: "حدث خطأ أثناء تحويل الصوت إلى نص",
-          variant: "destructive",
-        });
-        if (onError) onError('حدث خطأ أثناء معالجة الصوت');
-      }
-    } else {
-      console.log("⚠️ الملف الصوتي صغير جدًا، يبدو أنه لم يتم التقاط أي صوت");
-      toast({
-        title: "لم نتمكن من سماعك",
-        description: "الرجاء المحاولة مرة أخرى والتحدث بوضوح",
-      });
-    }
-  }, [onResult, onError, toast]);
-
-  // Clean up resources
-  const cleanupResources = useCallback(() => {
-    recorderManagerRef.current.cleanup();
-    audioAnalysisRef.current.cleanup();
-    
-    if (audioLevelIntervalRef.current) {
-      clearInterval(audioLevelIntervalRef.current);
-      audioLevelIntervalRef.current = null;
-    }
-    
-    setAudioLevel(0);
+  // Reset transcript
+  const resetTranscript = useCallback(() => {
+    setTranscript('');
   }, []);
 
-  // Initialize microphone once and keep reference
-  const initializeMicrophone = useCallback(async () => {
-    if (micInitializedRef.current) {
-      console.log("🎤 الميكروفون تم تهيئته بالفعل، استخدام النسخة المخزنة");
-      return;
+  // Initialize audio context for level detection
+  const initAudioContext = useCallback(async () => {
+    if (!audioContextRef.current) {
+      try {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        
+        if (!mediaStreamRef.current) {
+          mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+        }
+        
+        const source = audioContextRef.current.createMediaStreamSource(mediaStreamRef.current);
+        analyserRef.current = audioContextRef.current.createAnalyser();
+        analyserRef.current.fftSize = 256;
+        source.connect(analyserRef.current);
+      } catch (err) {
+        console.error('Error initializing audio context:', err);
+      }
     }
+  }, []);
 
-    try {
-      console.log("🎤 طلب إذن الوصول إلى الميكروفون...");
-      
-      // Request microphone permission with optimized settings
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        } 
-      });
-      
-      // Setup the recorder manager with this stream
-      await recorderManagerRef.current.setupMediaRecorder(stream);
-      
-      // Initialize audio analyzer with this stream
-      audioAnalysisRef.current.initializeAnalyzer(stream);
-      
-      micInitializedRef.current = true;
-      console.log("✅ تم تهيئة الميكروفون بنجاح");
-      
-      return stream;
-    } catch (err) {
-      console.error('❌ خطأ في الوصول إلى الميكروفون:', err);
-      setError('لا يمكن الوصول إلى الميكروفون');
-      
-      if (onError) onError('لا يمكن الوصول إلى الميكروفون');
-      throw err;
+  // Measure audio level
+  const measureAudioLevel = useCallback(() => {
+    if (!analyserRef.current || !isListening) return;
+    
+    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+    analyserRef.current.getByteFrequencyData(dataArray);
+    
+    // Calculate average volume
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      sum += dataArray[i];
     }
-  }, [onError]);
+    const average = sum / dataArray.length;
+    
+    // Normalize to 0-1
+    const normalizedValue = Math.min(average / 128, 1);
+    setAudioLevel(normalizedValue);
+    
+    if (onAudioLevelChange) {
+      onAudioLevelChange(normalizedValue);
+    }
+    
+    animationFrameRef.current = requestAnimationFrame(measureAudioLevel);
+  }, [isListening, onAudioLevelChange]);
 
-  // Start listening to microphone
+  // Initialize speech recognition
+  const initRecognition = useCallback(() => {
+    if (!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
+      setError(new Error('Speech recognition not supported in this browser.'));
+      return false;
+    }
+    
+    // Create a recognition instance if it doesn't exist
+    if (!recognitionRef.current) {
+      const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = language;
+      
+      recognitionRef.current.onstart = () => {
+        setIsListening(true);
+        setError(null);
+        if (onListeningChange) {
+          onListeningChange(true);
+        }
+      };
+      
+      recognitionRef.current.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        setError(new Error(`Speech recognition error: ${event.error}`));
+        
+        if (event.error === 'no-speech') {
+          // No speech detected, not really an error
+          setError(null);
+        }
+      };
+      
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+        if (onListeningChange) {
+          onListeningChange(false);
+        }
+      };
+      
+      recognitionRef.current.onresult = (event: any) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+            setIsProcessing(true);
+            if (onProcessingChange) {
+              onProcessingChange(true);
+            }
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+        
+        const currentTranscript = finalTranscript || interimTranscript;
+        setTranscript(currentTranscript);
+        
+        if (finalTranscript && onResult) {
+          // Submit final transcript to callback
+          onResult(finalTranscript);
+          
+          // Reset after processing
+          setTimeout(() => {
+            setIsProcessing(false);
+            if (onProcessingChange) {
+              onProcessingChange(false);
+            }
+          }, 500);
+        }
+      };
+    }
+    
+    return true;
+  }, [language, onListeningChange, onProcessingChange, onResult]);
+
+  // Start listening
   const startListening = useCallback(async () => {
     try {
-      // First check if we're already listening
-      if (isListening) {
-        console.log("🎤 الميكروفون نشط بالفعل");
+      if (!initRecognition()) {
         return;
       }
       
-      // Clean up any previous resources
-      cleanupResources();
+      // Initialize audio context for level detection
+      await initAudioContext();
       
-      setError(null);
-      setTranscript(''); // Clear previous transcript when starting to listen
-      
-      console.log("🎤 بدء الاستماع...");
-      
-      // Initialize microphone if not already initialized
-      await initializeMicrophone();
-      
-      // Start analyzing audio levels
-      const { analyzeAudio } = audioAnalysisRef.current;
-      analyzeAudio(setAudioLevel);
-      
-      // Also set up a regular interval to update audio level from MediaRecorderManager
-      audioLevelIntervalRef.current = setInterval(() => {
-        const level = recorderManagerRef.current.getCurrentAudioLevel();
-        if (level > 0) {
-          setAudioLevel(level);
-        }
-      }, 100);
-      
-      // Create and configure media recorder
-      recorderManagerRef.current.createMediaRecorder(
-        // onStart
-        () => {
-          console.log("🎤 بدأ التسجيل الصوتي");
-          setIsListening(true);
-        },
-        // onDataAvailable
-        (data) => {
-          console.log(`🔊 تم التقاط شريحة صوتية بحجم: ${data.size} بايت`);
-        },
-        // onStop
-        processRecordedAudio,
-        // onError
-        (event) => {
-          console.error('❌ خطأ في التسجيل الصوتي:', event);
-          setError('حدث خطأ أثناء التسجيل الصوتي');
-          setIsListening(false);
-          cleanupResources();
-        }
-      );
-      
-      // Start recording
-      recorderManagerRef.current.startRecording();
-      
+      // Start recognition
+      if (recognitionRef.current) {
+        recognitionRef.current.start();
+        // Start measuring audio level
+        measureAudioLevel();
+      }
     } catch (err) {
-      console.error('❌ خطأ في الوصول إلى الميكروفون:', err);
-      setError('لا يمكن الوصول إلى الميكروفون');
-      setIsListening(false);
-      toast({
-        title: "خطأ في الوصول إلى الميكروفون",
-        description: "الرجاء السماح بالوصول إلى الميكروفون في إعدادات المتصفح",
-        variant: "destructive",
-      });
-      if (onError) onError('لا يمكن الوصول إلى الميكروفون');
-      cleanupResources();
+      console.error('Error starting speech recognition:', err);
+      setError(err instanceof Error ? err : new Error('Failed to start speech recognition'));
     }
-  }, [cleanupResources, onError, toast, processRecordedAudio, isListening, initializeMicrophone]);
+  }, [initRecognition, initAudioContext, measureAudioLevel]);
 
   // Stop listening
   const stopListening = useCallback(() => {
-    if (isListening) {
-      console.log("🛑 إيقاف التسجيل الصوتي");
-      try {
-        recorderManagerRef.current.stopRecording();
-      } catch (err) {
-        console.error("❌ خطأ في إيقاف التسجيل الصوتي:", err);
-        setIsListening(false);
-        cleanupResources();
+    try {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
       }
+      
+      // Stop measuring audio level
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      
+      setAudioLevel(0);
+    } catch (err) {
+      console.error('Error stopping speech recognition:', err);
     }
-  }, [isListening, cleanupResources]);
+  }, []);
 
-  // Pre-initialize microphone permission on mount
+  // Clean up on unmount
   useEffect(() => {
-    // Try to initialize microphone permission early
-    if (!micInitializedRef.current) {
-      console.log("🎤 تهيئة إذن الميكروفون عند التحميل");
-      initializeMicrophone().catch(err => {
-        console.error("❌ فشل في الحصول على إذن الميكروفون:", err);
-      });
-    }
-    
     return () => {
-      cleanupResources();
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (err) {
+          // Ignore errors on cleanup
+        }
+      }
+      
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close();
+      }
     };
-  }, [initializeMicrophone, cleanupResources]);
-
-  // Auto-start if requested
-  useEffect(() => {
-    if (autoStart && !isListening && !isProcessing) {
-      console.log("🔄 بدء التسجيل التلقائي");
-      startListening();
-    }
-    
-    return () => {
-      cleanupResources();
-    };
-  }, [autoStart, startListening, cleanupResources, isListening, isProcessing]);
+  }, []);
 
   return {
     isListening,
+    transcript,
     startListening,
     stopListening,
-    transcript,
-    error,
+    resetTranscript,
     isProcessing,
     audioLevel,
-    resetTranscript: () => setTranscript('')
+    error
   };
 };
