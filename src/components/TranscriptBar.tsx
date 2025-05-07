@@ -20,6 +20,7 @@ const TranscriptBar: React.FC<TranscriptBarProps> = ({
   const [isVisible, setIsVisible] = useState(false);
   
   useEffect(() => {
+    // Always show the bar when there's text and isActive is true
     if (text && isActive === true) {
       setIsVisible(true);
       
@@ -31,11 +32,11 @@ const TranscriptBar: React.FC<TranscriptBarProps> = ({
         
         return () => clearTimeout(timer);
       }
-    } else if (isActive === false && !text) {
-      // Add a slight delay before hiding when isActive becomes false and no text
+    } else if (isActive === false) {
+      // Add a slight delay before hiding
       const timer = setTimeout(() => {
         setIsVisible(false);
-      }, 1000);
+      }, 500);
       
       return () => clearTimeout(timer);
     }

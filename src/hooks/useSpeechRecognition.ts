@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 // Define SpeechRecognition interfaces for TypeScript
@@ -167,6 +168,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       
       speechDetectedTimeoutRef.current = setTimeout(() => {
         if (onSpeechDetected && recentAverage > minSpeechLevel) {
+          console.log("🔊 Speech detection confirmed, triggering callback");
           onSpeechDetected();
         }
       }, 150); // Short delay to confirm it's not just a spike
@@ -206,7 +208,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     }
     
     animationFrameRef.current = requestAnimationFrame(measureAudioLevel);
-  }, [isListening, onAudioLevelChange, hasSpeechBeenDetected, minSpeechLevel, silenceThreshold, silenceTimeout, onSpeechDetected]);
+  }, [isListening, onAudioLevelChange, hasSpeechBeenDetected, minSpeechLevel, silenceThreshold, silenceTimeout, onSpeechDetected, stopListening]);
 
   // Initialize speech recognition
   const initRecognition = useCallback(() => {
@@ -283,6 +285,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
             }
           } else {
             interimTranscript += transcript;
+            console.log("🔊 Interim transcript:", interimTranscript);
           }
         }
         

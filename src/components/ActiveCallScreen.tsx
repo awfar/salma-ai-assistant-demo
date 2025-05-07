@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Volume2, Volume } from "lucide-react";
 import CallTimer from "@/components/CallTimer";
@@ -84,6 +83,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       // Small delay before starting to listen again
       setTimeout(() => {
         if (!processingUserInputRef.current) {
+          console.log("🎤 Starting listening after interruption");
           startListening();
         }
       }, 300);
@@ -95,6 +95,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     if (!text.trim() || processingUserInputRef.current) return;
     
     try {
+      console.log("🔄 Processing user input:", text);
       processingUserInputRef.current = true;
       
       // Stop any current audio and listening
@@ -216,6 +217,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     if (isListening) {
       // Update current transcript during listening
       if (transcript) {
+        console.log("🎤 Live transcript:", transcript);
         setCurrentTranscript(transcript);
       }
       
@@ -281,6 +283,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     setCurrentTranscript(""); // Clear transcript bar text
     
     if (!isMuted && firstMessagePlayed.current) {
+      console.log("🔄 Audio ended, scheduling listening");
       // Short delay before starting to listen
       scheduleListening(800);
     }
@@ -426,7 +429,15 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         autoGainControl: true,
       } 
     })
-      .then(() => console.log("✅ Microphone permission granted"))
+      .then(() => {
+        console.log("✅ Microphone permission granted");
+        // Try to start listening after permissions are granted
+        setTimeout(() => {
+          if (!isSpeaking && !isListening && firstMessagePlayed.current) {
+            startListening();
+          }
+        }, 2000);
+      })
       .catch(err => console.error("❌ Error accessing microphone:", err));
   }, []);
 
@@ -436,6 +447,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     const welcomeTimer = setTimeout(async () => {
       if (firstMessagePlayed.current) {
         // If we've already played the welcome message, just start listening
+        console.log("🎤 Welcome message already played, starting to listen");
         scheduleListening(800);
         return;
       }
@@ -449,7 +461,12 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         console.log("🔊 Converting welcome message to audio...");
         const audioUrl = await textToSpeech(welcomeMessage, {
           onStart: () => setIsSpeaking(true),
-          onEnd: () => setIsSpeaking(false)
+          onEnd: () => {
+            setIsSpeaking(false);
+            console.log("👋 Welcome message finished, ready to listen");
+            // Schedule listening after welcome message
+            scheduleListening(800);
+          }
         });
         
         if (audioUrl) {

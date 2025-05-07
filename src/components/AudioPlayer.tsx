@@ -52,24 +52,27 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
     useEffect(() => {
       if (!audioSource) return;
       
-      if (audioRef.current) {
-        audioRef.current.src = audioSource;
-        audioRef.current.load();
-        
-        if (autoPlay) {
-          audioRef.current.play()
-            .then(() => {
+      const setupAudio = async () => {
+        if (audioRef.current) {
+          audioRef.current.src = audioSource;
+          audioRef.current.load();
+          
+          if (autoPlay) {
+            try {
               console.log("▶️ Auto-playing audio");
+              await audioRef.current.play();
               isPlayingRef.current = true;
               if (onPlay) onPlay();
-            })
-            .catch((error) => {
+            } catch (error) {
               console.error("❌ Auto-play failed:", error);
               isPlayingRef.current = false;
               if (onError) onError(error instanceof Error ? error : new Error('Failed to auto-play audio'));
-            });
+            }
+          }
         }
-      }
+      };
+      
+      setupAudio();
     }, [audioSource, autoPlay, onPlay, onError]);
     
     // Handle volume changes
