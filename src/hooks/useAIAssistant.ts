@@ -1,16 +1,19 @@
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useToast } from "./use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
 interface TextToSpeechCallbacks {
   onStart?: () => void;
   onEnd?: () => void;
+  onChunk?: (chunk: ArrayBuffer) => void;
+  onStreamStart?: (mediaSource: MediaSource | AudioBufferSourceNode) => void;
 }
 
 interface UseAIAssistantReturn {
   askAssistant: (question: string) => Promise<string | null>;
   textToSpeech: (text: string, callbacks?: TextToSpeechCallbacks) => Promise<string | null>;
+  streamToSpeech: (text: string, callbacks?: TextToSpeechCallbacks) => Promise<void>;
   isLoading: boolean;
   isAudioLoading: boolean;
   cancelRequest?: () => void;
@@ -21,6 +24,51 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
   const [isAudioLoading, setIsAudioLoading] = useState(false);
   const { toast } = useToast();
   const abortControllerRef = useRef<AbortController | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  
+  // تهيئة AudioContext
+  useEffect(() => {
+    // تأجيل إنشاء AudioContext حتى يكون هناك تفاعل للمستخدم
+    const initAudioContext = () => {
+      try {
+        if (!audioContextRef.current) {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          audioContextRef.current = new AudioContextClass();
+          console.log("✅ تم إنشاء AudioContext بنجاح");
+        }
+      } catch (err) {
+        console.error("❌ فشل في إنشاء AudioContext:", err);
+      }
+    };
+
+    // إضافة معالجات أحداث لتفاعل المستخدم
+    const handleUserInteraction = () => {
+      initAudioContext();
+      
+      // إذا كان AudioContext متوقفًا، قم بتشغيله
+      if (audioContextRef.current && audioContextRef.current.state === "suspended") {
+        audioContextRef.current.resume();
+      }
+    };
+
+    // إضافة معالجات للأحداث المختلفة التي تشير إلى تفاعل المستخدم
+    window.addEventListener("click", handleUserInteraction, { once: true });
+    window.addEventListener("touchstart", handleUserInteraction, { once: true });
+    window.addEventListener("keydown", handleUserInteraction, { once: true });
+
+    return () => {
+      window.removeEventListener("click", handleUserInteraction);
+      window.removeEventListener("touchstart", handleUserInteraction);
+      window.removeEventListener("keydown", handleUserInteraction);
+      
+      // تنظيف AudioContext عند إزالة المكون
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(err => {
+          console.error("❌ خطأ عند إغلاق AudioContext:", err);
+        });
+      }
+    };
+  }, []);
   
   // Cancel any in-progress requests
   const cancelRequest = useCallback(() => {
@@ -84,7 +132,136 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
     }
   }, [toast, cancelRequest]);
   
-  // Convert text to speech
+  // طريقة جديدة لدفق الصوت مباشرة من ElevenLabs
+  const streamToSpeech = useCallback(async (text: string, callbacks?: TextToSpeechCallbacks): Promise<void> => {
+    if (!text.trim()) {
+      console.error("❌ النص فارغ، لا يمكن تحويله إلى صوت");
+      return;
+    }
+
+    try {
+      setIsAudioLoading(true);
+      
+      // التأكد من وجود مستمع صوتي
+      if (!audioContextRef.current) {
+        try {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          audioContextRef.current = new AudioContextClass();
+          console.log("✅ تم إنشاء AudioContext لتشغيل الصوت المدفق");
+        } catch (err) {
+          console.error("❌ فشل في إنشاء AudioContext:", err);
+          throw new Error("لا يمكن إنشاء سياق صوتي. الرجاء التأكد من أن المتصفح يدعم Web Audio API.");
+        }
+      }
+
+      // إذا كان AudioContext متوقفًا، قم بتشغيله
+      if (audioContextRef.current.state === "suspended") {
+        await audioContextRef.current.resume();
+        console.log("✅ تم استئناف عمل AudioContext");
+      }
+
+      console.log("🔊 بدء تدفق النص إلى صوت:", text.substring(0, 50) + "...");
+      callbacks?.onStart?.();
+
+      // استدعاء وظيفة دفق النص إلى كلام
+      const response = await fetch(`${supabase.functions.url}/text-to-speech`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${supabase.auth.session()?.access_token || ''}`,
+        },
+        body: JSON.stringify({ 
+          text, 
+          stream: true
+        })
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error(`فشل في دفق النص إلى كلام: ${response.status} ${response.statusText}`);
+      }
+
+      console.log("✅ تم بدء استقبال دفق الصوت من الخادم");
+
+      // إنشاء قارئ الدفق
+      const reader = response.body.getReader();
+      const streamProcessor = new ReadableStream({
+        async start(controller) {
+          try {
+            // معالجة بيانات الدفق
+            while (true) {
+              const { done, value } = await reader.read();
+              
+              if (done) {
+                console.log("✅ انتهى دفق الصوت");
+                controller.close();
+                callbacks?.onEnd?.();
+                break;
+              }
+              
+              // هذه الدالة تعالج كل قطعة من البيانات الصوتية وتشغلها
+              await processAudioChunk(value, audioContextRef.current!);
+              callbacks?.onChunk?.(value);
+              
+              // إرسال البيانات للتحكم في الدفق
+              controller.enqueue(value);
+            }
+          } catch (error) {
+            console.error("❌ خطأ في معالجة دفق الصوت:", error);
+            controller.error(error);
+          } finally {
+            setIsAudioLoading(false);
+          }
+        }
+      });
+
+      // بدء معالجة الدفق
+      const stream = new Response(streamProcessor);
+      
+      // معالجة البيانات الصوتية من الدفق
+      async function processAudioChunk(chunk: Uint8Array, audioContext: AudioContext) {
+        try {
+          // تحويل البيانات إلى AudioBuffer
+          const audioBuffer = await audioContext.decodeAudioData(chunk.buffer);
+          
+          // إنشاء مصدر صوتي
+          const source = audioContext.createBufferSource();
+          source.buffer = audioBuffer;
+          source.connect(audioContext.destination);
+          
+          // إخطار بأننا بدأنا تدفق الصوت
+          if (callbacks?.onStreamStart) {
+            callbacks.onStreamStart(source);
+          }
+          
+          // تشغيل الصوت
+          source.start(0);
+          
+          // الانتظار حتى انتهاء تشغيل هذه القطعة
+          return new Promise<void>((resolve) => {
+            source.onended = () => resolve();
+          });
+        } catch (error) {
+          console.error("❌ خطأ في معالجة قطعة الصوت:", error);
+        }
+      }
+
+      // ابدأ تشغيل الدفق
+      return await stream.arrayBuffer();
+      
+    } catch (error) {
+      console.error("❌ خطأ في تدفق النص إلى كلام:", error);
+      setIsAudioLoading(false);
+      callbacks?.onEnd?.();
+      
+      toast({
+        title: "خطأ في تحويل النص إلى صوت",
+        description: error instanceof Error ? error.message : "حدث خطأ أثناء تحويل النص إلى صوت",
+        variant: "destructive",
+      });
+    }
+  }, [toast, supabase]);
+  
+  // Convert text to speech (old method for compatibility)
   const textToSpeech = useCallback(async (text: string, callbacks?: TextToSpeechCallbacks): Promise<string | null> => {
     try {
       setIsAudioLoading(true);
@@ -98,7 +275,7 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       
       // Call the text-to-speech Edge Function
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
-        body: { text }
+        body: { text, stream: false }
       });
       
       if (error || !data) {
@@ -190,5 +367,5 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
     }
   };
   
-  return { askAssistant, textToSpeech, isLoading, isAudioLoading, cancelRequest };
+  return { askAssistant, textToSpeech, streamToSpeech, isLoading, isAudioLoading, cancelRequest };
 };

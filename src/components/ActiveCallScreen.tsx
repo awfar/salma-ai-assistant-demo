@@ -32,6 +32,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   const [audioLevel, setAudioLevel] = useState<number>(0);
   const [showErrorMessage, setShowErrorMessage] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [useStreamingAudio, setUseStreamingAudio] = useState<boolean>(true);
   const { toast } = useToast();
   
   // References
@@ -41,6 +42,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     play: () => Promise<void>;
     isPlaying: boolean; 
   } | null>(null);
+  const audioStreamRef = useRef<MediaSource | AudioBufferSourceNode | null>(null);
   const firstMessagePlayed = useRef<boolean>(false);
   const welcomeAttempted = useRef<boolean>(false);
   const recorderRef = useRef<VoiceRecorderInterface | null>(null);
@@ -52,6 +54,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   const { 
     askAssistant, 
     textToSpeech,
+    streamToSpeech,
     cancelRequest,
     isLoading: isAIThinking,
     isAudioLoading 
@@ -157,24 +160,82 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         // Convert text to speech
         if (!audioMuted && isSpeakerOn) {
           console.log("🔊 تحويل النص إلى كلام...");
-          const audioUrl = await textToSpeech(aiResponse, {
-            onStart: () => {
-              console.log("🔊 بدء تشغيل الصوت");
-              setIsSpeaking(true);
-            },
-            onEnd: () => {
-              console.log("🔊 انتهى تشغيل الصوت");
+          
+          if (useStreamingAudio) {
+            // استخدام طريقة الدفق الجديدة
+            console.log("🔊 استخدام تقنية تدفق الصوت ElevenLabs...");
+            setIsSpeaking(true);
+            
+            try {
+              await streamToSpeech(aiResponse, {
+                onStart: () => {
+                  console.log("🔊 بدء تدفق الصوت");
+                  setIsSpeaking(true);
+                },
+                onStreamStart: (source) => {
+                  console.log("🔊 تم بدء مصدر الصوت");
+                  audioStreamRef.current = source;
+                },
+                onChunk: (chunk) => {
+                  // يمكننا تتبع تقدم الدفق هنا إذا احتجنا لذلك
+                },
+                onEnd: () => {
+                  console.log("🔊 انتهى تدفق الصوت");
+                  audioStreamRef.current = null;
+                  setIsSpeaking(false);
+                  handleAudioEnded();
+                }
+              });
+            } catch (e) {
+              console.error("❌ حدث خطأ أثناء تدفق الصوت:", e);
               setIsSpeaking(false);
               handleAudioEnded();
+              
+              // Try falling back to regular audio if streaming fails
+              console.log("🔄 المحاولة بالطريقة التقليدية بعد فشل الدفق...");
+              
+              const audioUrl = await textToSpeech(aiResponse, {
+                onStart: () => {
+                  console.log("🔊 بدء تشغيل الصوت (الطريقة التقليدية)");
+                  setIsSpeaking(true);
+                },
+                onEnd: () => {
+                  console.log("🔊 انتهى تشغيل الصوت (الطريقة التقليدية)");
+                  setIsSpeaking(false);
+                  handleAudioEnded();
+                }
+              });
+              
+              if (audioUrl) {
+                console.log("🔊 تم الحصول على رابط الصوت:", audioUrl.substring(0, 50) + "...");
+                setAudioSource(audioUrl);
+              } else {
+                console.error("❌ فشل الحصول على رابط الصوت");
+                handleAudioEnded(); 
+              }
             }
-          });
-          
-          if (audioUrl) {
-            console.log("🔊 تم الحصول على رابط الصوت:", audioUrl.substring(0, 50) + "...");
-            setAudioSource(audioUrl);
+            
           } else {
-            console.error("❌ فشل الحصول على رابط الصوت");
-            handleAudioEnded(); 
+            // الطريقة القديمة - استخدام ملف صوتي كامل
+            const audioUrl = await textToSpeech(aiResponse, {
+              onStart: () => {
+                console.log("🔊 بدء تشغيل الصوت");
+                setIsSpeaking(true);
+              },
+              onEnd: () => {
+                console.log("🔊 انتهى تشغيل الصوت");
+                setIsSpeaking(false);
+                handleAudioEnded();
+              }
+            });
+            
+            if (audioUrl) {
+              console.log("🔊 تم الحصول على رابط الصوت:", audioUrl.substring(0, 50) + "...");
+              setAudioSource(audioUrl);
+            } else {
+              console.error("❌ فشل الحصول على رابط الصوت");
+              handleAudioEnded(); 
+            }
           }
         } else {
           // If sound is disabled, skip audio phase
@@ -337,6 +398,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   const handleAudioEnded = useCallback(() => {
     setIsSpeaking(false);
     setCurrentTranscript(""); // Clear transcript bar text
+    audioStreamRef.current = null;
   }, []);
 
   // Handle speaker button click - controls audio output
@@ -417,28 +479,79 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         if (isSpeakerOn) {
           console.log("🔊 تحويل رسالة الترحيب إلى صوت...");
           
-          const audioUrl = await textToSpeech(welcomeMessage, {
-            onStart: () => {
-              console.log("🔊 بدأ تشغيل رسالة الترحيب");
-              setIsSpeaking(true);
-            },
-            onEnd: () => {
-              console.log("🔊 انتهت رسالة الترحيب");
+          if (useStreamingAudio) {
+            // استخدم طريقة الدفق للترحيب
+            try {
+              await streamToSpeech(welcomeMessage, {
+                onStart: () => {
+                  console.log("🔊 بدء تدفق صوت الترحيب");
+                  setIsSpeaking(true);
+                },
+                onStreamStart: (source) => {
+                  audioStreamRef.current = source;
+                },
+                onChunk: (chunk) => {
+                  // يمكننا تتبع تقدم الدفق هنا إذا احتجنا لذلك
+                },
+                onEnd: () => {
+                  console.log("🔊 انتهى تدفق صوت الترحيب");
+                  audioStreamRef.current = null;
+                  setIsSpeaking(false);
+                  handleAudioEnded();
+                  firstMessagePlayed.current = true;
+                }
+              });
+            } catch (e) {
+              console.error("❌ خطأ في تدفق صوت الترحيب:", e);
+              
+              // الرجوع للطريقة التقليدية في حالة الفشل
+              const audioUrl = await textToSpeech(welcomeMessage, {
+                onStart: () => {
+                  console.log("🔊 بدأ تشغيل رسالة الترحيب (الطريقة التقليدية)");
+                  setIsSpeaking(true);
+                },
+                onEnd: () => {
+                  console.log("🔊 انتهت رسالة الترحيب");
+                  setIsSpeaking(false);
+                  handleAudioEnded();
+                  firstMessagePlayed.current = true;
+                }
+              });
+              
+              if (audioUrl) {
+                console.log("🔊 تعيين مصدر صوت الترحيب");
+                setAudioSource(audioUrl);
+              } else {
+                setIsSpeaking(false);
+                handleAudioEnded();
+                firstMessagePlayed.current = true;
+              }
+            }
+          } else {
+            // الطريقة القديمة - استخدام ملف صوتي كامل
+            const audioUrl = await textToSpeech(welcomeMessage, {
+              onStart: () => {
+                console.log("🔊 بدأ تشغيل رسالة الترحيب");
+                setIsSpeaking(true);
+              },
+              onEnd: () => {
+                console.log("🔊 انتهت رسالة الترحيب");
+                setIsSpeaking(false);
+                handleAudioEnded();
+                firstMessagePlayed.current = true; // Mark as played after completion
+              }
+            });
+            
+            if (audioUrl) {
+              console.log("🔊 تعيين مصدر صوت الترحيب");
+              setAudioSource(audioUrl);
+            } else {
+              console.error("❌ فشل الحصول على رابط صوت الترحيب");
               setIsSpeaking(false);
               handleAudioEnded();
-              firstMessagePlayed.current = true; // Mark as played after completion
+              // Still mark as played to avoid retries
+              firstMessagePlayed.current = true;
             }
-          });
-          
-          if (audioUrl) {
-            console.log("🔊 تعيين مصدر صوت الترحيب");
-            setAudioSource(audioUrl);
-          } else {
-            console.error("❌ فشل الحصول على رابط صوت الترحيب");
-            setIsSpeaking(false);
-            handleAudioEnded();
-            // Still mark as played to avoid retries
-            firstMessagePlayed.current = true;
           }
         } else {
           // Just mark as played if speaker is off
@@ -459,7 +572,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     const welcomeTimer = setTimeout(playWelcomeMessage, 800);
     
     return () => clearTimeout(welcomeTimer);
-  }, [textToSpeech, addMessage, isSpeakerOn, handleAudioEnded]);
+  }, [textToSpeech, streamToSpeech, addMessage, isSpeakerOn, handleAudioEnded, useStreamingAudio]);
 
   return (
     <div className="relative w-full max-w-md mx-auto aspect-[9/16] md:aspect-auto md:h-[80vh] overflow-hidden rounded-2xl md:rounded-3xl bg-black shadow-xl border-8 border-gray-800 flex flex-col">
@@ -599,7 +712,8 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       
       {/* Hidden audio player with updated muting control */}
       <AudioPlayer 
-        audioSource={audioSource} 
+        audioSource={audioSource}
+        audioStream={audioStreamRef.current}
         autoPlay={Boolean(audioSource && isSpeakerOn)}
         onEnded={handleAudioEnded}
         onPlay={() => {
@@ -613,6 +727,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         ref={setupAudioController}
         isMuted={audioMuted}
         volume={1.0}
+        useStreaming={useStreamingAudio}
       />
     </div>
   );

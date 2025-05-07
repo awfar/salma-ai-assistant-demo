@@ -3,12 +3,14 @@ import React, { useEffect, useRef, forwardRef, useImperativeHandle, useState } f
 
 interface AudioPlayerProps {
   audioSource?: string;
+  audioStream?: MediaSource | AudioBufferSourceNode | null;
   autoPlay?: boolean;
   onEnded?: () => void;
   onPlay?: () => void;
   onError?: (error: Error) => void;
   volume?: number;
-  isMuted?: boolean; // Prop to separately control audio muting
+  isMuted?: boolean;
+  useStreaming?: boolean;
 }
 
 interface AudioPlayerRef {
@@ -18,12 +20,23 @@ interface AudioPlayerRef {
 }
 
 const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
-  ({ audioSource, autoPlay = true, onEnded, onPlay, onError, volume = 1, isMuted = false }, ref) => {
+  ({ 
+    audioSource, 
+    audioStream = null,
+    autoPlay = true, 
+    onEnded, 
+    onPlay, 
+    onError, 
+    volume = 1, 
+    isMuted = false,
+    useStreaming = false
+  }, ref) => {
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const isPlayingRef = useRef(false);
     const [audioLoaded, setAudioLoaded] = useState(false);
     const [audioPlayAttempted, setAudioPlayAttempted] = useState(false);
     const audioSourceRef = useRef<string | undefined>(audioSource);
+    const audioContextRef = useRef<AudioContext | null>(null);
     
     // Track changes to audioSource to detect new audio
     useEffect(() => {
@@ -33,6 +46,13 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
     useImperativeHandle(ref, () => ({
       play: async () => {
         try {
+          if (useStreaming && audioStream) {
+            console.log("▶️ استخدام الصوت المدفق");
+            isPlayingRef.current = true;
+            if (onPlay) onPlay();
+            return;
+          }
+          
           if (!audioRef.current) {
             console.error("❌ عنصر الصوت غير موجود");
             return;
@@ -73,6 +93,21 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         }
       },
       pause: () => {
+        if (useStreaming && audioStream) {
+          console.log("⏸️ إيقاف الصوت المدفق");
+          // For streaming audio, we try to stop the AudioBufferSourceNode
+          if ('stop' in audioStream) {
+            try {
+              audioStream.stop(0);
+            } catch (e) {
+              console.log("عملية الإيقاف غير ممكنة، ربما تم إيقاف الصوت بالفعل");
+            }
+          }
+          isPlayingRef.current = false;
+          if (onEnded) onEnded();
+          return;
+        }
+        
         if (!audioRef.current) return;
         
         console.log("⏸️ إيقاف الصوت");
@@ -103,6 +138,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
         if (AudioContext) {
           const audioContext = new AudioContext();
+          audioContextRef.current = audioContext;
           const oscillator = audioContext.createOscillator();
           oscillator.connect(audioContext.destination);
           oscillator.start(0);
@@ -128,8 +164,25 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
     
     // Handle audio source changes with better error handling
     useEffect(() => {
-      if (!audioSource) {
+      if (!audioSource && !useStreaming) {
         setAudioLoaded(false);
+        return;
+      }
+      
+      if (useStreaming && audioStream) {
+        // عندما نستخدم تدفق الصوت، فنحن نعتمد على معالجة AudioContext
+        console.log("🎵 استخدام وضع تدفق الصوت");
+        setAudioLoaded(true);
+        
+        // إذا كان هناك جهاز صوتي، فقم بإعداد الاستماع لنهاية الصوت
+        if ('onended' in audioStream) {
+          audioStream.onended = () => {
+            console.log("🔊 انتهى تشغيل الصوت المدفق");
+            isPlayingRef.current = false;
+            if (onEnded) onEnded();
+          };
+        }
+        
         return;
       }
       
@@ -210,8 +263,8 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         };
         
         // Set the new source
-        console.log("🎵 تعيين مصدر الصوت:", audioSource.substring(0, 50) + "...");
-        audio.src = audioSource;
+        console.log("🎵 تعيين مصدر الصوت:", audioSource?.substring(0, 50) + "...");
+        audio.src = audioSource || '';
         audio.volume = isMuted ? 0 : volume;
         audio.preload = "auto";
         
@@ -229,7 +282,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       
       setupAudio();
       
-    }, [audioSource, autoPlay, isMuted, volume, onEnded, onPlay, onError]);
+    }, [audioSource, audioStream, autoPlay, isMuted, volume, onEnded, onPlay, onError, useStreaming]);
     
     // Add event listeners for user interaction to unlock audio on iOS/mobile
     useEffect(() => {
@@ -270,13 +323,23 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
             console.error("❌ خطأ أثناء التنظيف:", e);
           }
         }
+        
+        // تنظيف AudioContext
+        if (audioContextRef.current) {
+          try {
+            audioContextRef.current.close();
+          } catch (e) {
+            console.error("❌ خطأ أثناء إغلاق AudioContext:", e);
+          }
+          audioContextRef.current = null;
+        }
       };
     }, []);
     
     // Use DOM APIs to inject an audio element into the document body for iOS 
     // compatibility - this helps with audio on Safari
     useEffect(() => {
-      if (!audioSource) return;
+      if (!audioSource || useStreaming) return;
       
       // Create a hidden audio element in the DOM for iOS Safari
       const domAudio = document.createElement('audio');
@@ -288,7 +351,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       return () => {
         document.body.removeChild(domAudio);
       };
-    }, [audioSource]);
+    }, [audioSource, useStreaming]);
     
     return null; // Audio player is not visible
   }

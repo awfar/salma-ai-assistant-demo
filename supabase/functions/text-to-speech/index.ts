@@ -4,8 +4,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const ELEVEN_LABS_API_KEY = Deno.env.get("ELEVEN_LABS_API_KEY");
 
 // هذه المعرفات الصوتية من Eleven Labs التي يمكننا استخدامها
-// نستخدم افتراضيًا صوت Sarah - لأنثى عربية
-const VOICE_ID = "EXAVITQu4vr4xnSDxMaL"; 
+// نستخدم معرّف الصوت المرتبط بالوكيل
+const VOICE_ID = "xBxkQvOKMczEIbvEjnFZ"; 
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,7 +21,7 @@ serve(async (req) => {
 
   try {
     // استلام النص المراد تحويله إلى كلام
-    const { text, voice = VOICE_ID } = await req.json();
+    const { text, voice = VOICE_ID, stream = true } = await req.json();
 
     if (!text) {
       throw new Error("لم يتم توفير نص للتحويل");
@@ -29,65 +29,98 @@ serve(async (req) => {
 
     console.log("محاولة تحويل النص:", text);
     console.log("استخدام صوت ElevenLabs ID:", voice);
+    console.log("استخدام وضع الدفق (streaming):", stream);
 
-    // إرسال طلب إلى Eleven Labs API مع تحسين الإعدادات
-    const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voice}`,
-      {
+    // الإعدادات المشتركة للطلب
+    const requestBody = JSON.stringify({
+      text: text,
+      model_id: "eleven_multilingual_v2",
+      voice_settings: {
+        stability: 0.65,
+        similarity_boost: 0.85,
+        style: 0.5,
+        use_speaker_boost: true,
+      },
+    });
+
+    const headers = {
+      "Accept": stream ? "audio/mpeg" : "audio/mpeg",
+      "Content-Type": "application/json",
+      "xi-api-key": ELEVEN_LABS_API_KEY || "",
+    };
+
+    if (stream) {
+      // استخدام نقطة نهاية الدفق
+      const streamUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voice}/stream`;
+      console.log("استخدام واجهة برمجة الدفق:", streamUrl);
+
+      const response = await fetch(streamUrl, {
         method: "POST",
-        headers: {
-          "Accept": "audio/mpeg",
-          "Content-Type": "application/json",
-          "xi-api-key": ELEVEN_LABS_API_KEY || "",
-        },
-        body: JSON.stringify({
-          text: text,
-          model_id: "eleven_multilingual_v2",
-          voice_settings: {
-            stability: 0.7,          // زيادة الاستقرار قليلاً
-            similarity_boost: 0.8,
-            style: 0.5,              // زيادة التعبير قليلاً
-            use_speaker_boost: true,
-            speaking_rate: 1.0,      // معدل تحدث عادي
-          },
-        }),
+        headers: headers,
+        body: requestBody,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("خطأ من Eleven Labs API:", errorText);
+        throw new Error(`فشل في دفق النص إلى كلام: ${response.status}`);
       }
-    );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("خطأ من Eleven Labs API:", errorText);
-      throw new Error(`فشل في تحويل النص إلى كلام: ${response.status}`);
-    }
+      console.log("تم بدء دفق الصوت بنجاح");
 
-    console.log("تم تحويل النص إلى كلام بنجاح، جاري معالجة البيانات الصوتية");
-
-    // الحصول على البيانات الصوتية
-    const audioArrayBuffer = await response.arrayBuffer();
-    
-    // التحقق من أن البيانات الصوتية غير فارغة
-    if (!audioArrayBuffer || audioArrayBuffer.byteLength === 0) {
-      throw new Error("تم استلام بيانات صوتية فارغة من Eleven Labs API");
-    }
-    
-    console.log(`تم استلام بيانات صوتية بحجم: ${audioArrayBuffer.byteLength} بايت`);
-    
-    // تحويل ArrayBuffer إلى Base64 بطريقة آمنة
-    const audioBase64 = bufferToBase64(audioArrayBuffer);
-    
-    console.log(`تم تحويل البيانات الصوتية إلى Base64 بنجاح، الطول: ${audioBase64.length}`);
-
-    return new Response(
-      JSON.stringify({
-        audio: audioBase64,
-      }),
-      {
+      // إعادة دفق البيانات الصوتية مباشرة للمتصفح
+      return new Response(response.body, {
         headers: {
           ...corsHeaders,
-          "Content-Type": "application/json",
+          "Content-Type": "audio/mpeg",
         },
+      });
+    } else {
+      // استخدام النقطة النهائية العادية (للتوافق)
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${voice}`,
+        {
+          method: "POST",
+          headers: headers,
+          body: requestBody,
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("خطأ من Eleven Labs API:", errorText);
+        throw new Error(`فشل في تحويل النص إلى كلام: ${response.status}`);
       }
-    );
+
+      console.log("تم تحويل النص إلى كلام بنجاح، جاري معالجة البيانات الصوتية");
+
+      // الحصول على البيانات الصوتية
+      const audioArrayBuffer = await response.arrayBuffer();
+      
+      // التحقق من أن البيانات الصوتية غير فارغة
+      if (!audioArrayBuffer || audioArrayBuffer.byteLength === 0) {
+        throw new Error("تم استلام بيانات صوتية فارغة من Eleven Labs API");
+      }
+      
+      console.log(`تم استلام بيانات صوتية بحجم: ${audioArrayBuffer.byteLength} بايت`);
+      
+      // تحويل ArrayBuffer إلى Base64 بطريقة آمنة
+      const audioBase64 = bufferToBase64(audioArrayBuffer);
+      
+      console.log(`تم تحويل البيانات الصوتية إلى Base64 بنجاح، الطول: ${audioBase64.length}`);
+
+      return new Response(
+        JSON.stringify({
+          audio: audioBase64,
+        }),
+        {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    }
   } catch (error) {
     console.error("خطأ في تحويل النص إلى كلام:", error);
     return new Response(
