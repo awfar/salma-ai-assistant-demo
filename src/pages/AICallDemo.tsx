@@ -47,6 +47,9 @@ const AICallDemo = () => {
     try {
       console.log("🎤 طلب إذن الوصول إلى الميكروفون...");
       
+      // Pre-warm the audio context to avoid delays
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
       // Explicitly request microphone permissions with optimized parameters
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -56,8 +59,28 @@ const AICallDemo = () => {
         } 
       });
       
-      // Close the stream immediately after getting permission
+      // Create an analyzer to verify audio input is working
+      const analyser = audioContext.createAnalyser();
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+      
+      // Check that we're actually getting audio data
+      analyser.fftSize = 256;
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(dataArray);
+      
+      // Test for audio level (just log it)
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+      }
+      const average = sum / dataArray.length;
+      console.log("🎤 Initial microphone level:", average);
+      
+      // Close the test stream
+      source.disconnect();
       stream.getTracks().forEach(track => track.stop());
+      audioContext.close();
       
       setMicPermissionGranted(true);
       setCallActive(true);

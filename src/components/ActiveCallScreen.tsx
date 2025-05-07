@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Volume2, Volume } from "lucide-react";
 import CallTimer from "@/components/CallTimer";
@@ -207,9 +208,9 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     },
     onAudioLevelChange: handleAudioLevelChange,
     onSpeechDetected: handleSpeechDetected,
-    silenceThreshold: 0.05,
-    silenceTimeout: 800,
-    minSpeechLevel: 0.1
+    silenceThreshold: 0.03, // Lower threshold to detect more audio
+    silenceTimeout: 1000, // Slightly longer silence before stopping
+    minSpeechLevel: 0.08  // Lower threshold to consider as speech
   });
 
   // Update transcript and monitor audio level during listening
@@ -256,25 +257,21 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
 
   // Handle suggested question selection - use processUserInput directly
   const handleQuestionSelect = (question: string) => {
-    if (isSpeaking || isTranscribing || isAIThinking || processingUserInputRef.current) {
-      console.log("❌ Cannot process suggested question now:", {
-        isSpeaking,
-        isTranscribing,
-        isAIThinking,
-        processingUserInput: processingUserInputRef.current
-      });
-      return;
+    console.log("🖱️ Quick question clicked:", question);
+    if (isSpeaking) {
+      console.log("🛑 Stopping AI speech to process question");
+      stopCurrentAudio();
     }
     
-    // Stop current listening if any
     if (isListening) {
+      console.log("🛑 Stopping listening to process question");
       stopListening();
     }
     
-    console.log("📝 Processing suggested question:", question);
-    
-    // Process the question directly using the same pipeline as voice input
-    processUserInput(question);
+    // Add a small delay to ensure everything is reset
+    setTimeout(() => {
+      processUserInput(question);
+    }, 200);
   };
 
   // When audio ends, start listening automatically
@@ -350,23 +347,25 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   
   // Stop listening when stopping call
   useEffect(() => {
-    if (isListening) {
-      stopListening();
-    }
-    stopCurrentAudio();
-    
-    // Clean up all timeouts
-    if (autoListenTimeoutRef.current) {
-      clearTimeout(autoListenTimeoutRef.current);
-    }
-    
-    if (silenceTimeoutRef.current) {
-      clearTimeout(silenceTimeoutRef.current);
-    }
-    
-    if (maxListeningTimeRef.current) {
-      clearTimeout(maxListeningTimeRef.current);
-    }
+    return () => {
+      if (isListening) {
+        stopListening();
+      }
+      stopCurrentAudio();
+      
+      // Clean up all timeouts
+      if (autoListenTimeoutRef.current) {
+        clearTimeout(autoListenTimeoutRef.current);
+      }
+      
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+      }
+      
+      if (maxListeningTimeRef.current) {
+        clearTimeout(maxListeningTimeRef.current);
+      }
+    };
   }, [isListening, stopListening, stopCurrentAudio]);
 
   // Stop listening if AI is thinking or speaking
@@ -579,14 +578,15 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         </div>
       )}
       
-      {/* Audio level indicator */}
-      {isListening && audioLevel > 0.05 && (
+      {/* Enhanced Audio level indicator with better visibility */}
+      {isListening && (
         <div 
           className="absolute top-16 left-4 animate-pulse w-8 h-8 rounded-full flex items-center justify-center"
           style={{
-            transform: `scale(${1 + audioLevel * 0.5})`,
+            transform: `scale(${1 + audioLevel * 2})`,
             opacity: Math.min(1, audioLevel + 0.4),
-            backgroundColor: `rgba(52, 211, 153, ${audioLevel * 0.8})`
+            backgroundColor: `rgba(52, 211, 153, ${audioLevel * 0.8})`,
+            transition: 'transform 100ms ease-out, opacity 100ms ease-out'
           }}
         >
           <div className="w-4 h-4 bg-green-400 rounded-full" />

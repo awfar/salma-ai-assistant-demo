@@ -28,6 +28,11 @@ const SuggestedQuestions: React.FC<SuggestedQuestionsProps> = ({
     }
   };
 
+  const handleQuestionClick = (question: string) => {
+    console.log("Question clicked:", question);
+    onQuestionSelect(question);
+  };
+
   if (!questions.length) return null;
 
   return (
@@ -58,8 +63,8 @@ const SuggestedQuestions: React.FC<SuggestedQuestionsProps> = ({
         {questions.map((question, index) => (
           <button
             key={index}
-            onClick={() => onQuestionSelect(question)}
-            className="px-4 py-2 bg-white/20 backdrop-blur-sm text-white border border-white/30 rounded-full text-sm whitespace-nowrap hover:bg-white/30 transition-colors snap-start"
+            onClick={() => handleQuestionClick(question)}
+            className="px-4 py-2 bg-white/20 backdrop-blur-sm text-white border border-white/30 rounded-full text-sm whitespace-nowrap hover:bg-white/30 transition-colors snap-start active:scale-95 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white/50"
           >
             {question}
           </button>

@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 // Define SpeechRecognition interfaces for TypeScript
@@ -173,16 +172,21 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
     analyserRef.current.getByteFrequencyData(dataArray);
     
-    // Calculate average volume
+    // Calculate average volume and emphasize it for better visualization
     let sum = 0;
     for (let i = 0; i < dataArray.length; i++) {
       sum += dataArray[i];
     }
     const average = sum / dataArray.length;
     
-    // Normalize to 0-1
-    const normalizedValue = Math.min(average / 128, 1);
+    // Normalize to 0-1 and apply a slight emphasis curve
+    const normalizedValue = Math.min(Math.pow(average / 128, 1.2), 1);
     setAudioLevel(normalizedValue);
+    
+    // Log audio level more frequently for debugging
+    if (Math.random() < 0.05) {  // Log about 5% of the time
+      console.log(`🔊 Audio level: ${normalizedValue.toFixed(2)}`);
+    }
     
     // Keep a small history of volume levels for smoother detection
     volumeHistoryRef.current.push(normalizedValue);
@@ -193,7 +197,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     // Calculate average of recent volume levels
     const recentAverage = volumeHistoryRef.current.reduce((a, b) => a + b, 0) / volumeHistoryRef.current.length;
     
-    // Detect speech vs silence
+    // Detect speech vs silence with more sensitivity
     if (recentAverage > minSpeechLevel && !hasSpeechBeenDetected) {
       console.log(`🔊 Speech detected! Level: ${recentAverage.toFixed(2)}`);
       setHasSpeechBeenDetected(true);
@@ -233,11 +237,6 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
           silenceTimeoutRef.current = null;
         }, silenceTimeout);
       }
-    }
-    
-    // Log audio level periodically (but not too often)
-    if (Math.random() < 0.01) {
-      console.log(`📊 Audio level: ${normalizedValue.toFixed(2)}, Recent avg: ${recentAverage.toFixed(2)}`);
     }
     
     // Callback for audio level

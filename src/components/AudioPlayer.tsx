@@ -40,7 +40,10 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         if (audioRef.current) {
           console.log("⏸️ Pausing audio");
           audioRef.current.pause();
+          audioRef.current.currentTime = 0; // Reset position to start
           isPlayingRef.current = false;
+          // Manually trigger onended to signal complete stop
+          if (onEnded) onEnded();
         }
       },
       get isPlaying() {
