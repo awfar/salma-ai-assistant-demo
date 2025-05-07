@@ -131,7 +131,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     }
   }, []);
 
-  // Define stopListening first so it can be referenced by other functions
+  // ***IMPORTANT CHANGE*** - Define stopListening first, without any references to startListening
   const stopListening = useCallback(() => {
     try {
       if (recognitionRef.current) {
@@ -160,6 +160,126 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       console.error('Error stopping speech recognition:', err);
     }
   }, []);
+
+  // Initialize speech recognition
+  const initRecognition = useCallback(() => {
+    // Check for browser support
+    if (!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
+      setError(new Error('Speech recognition not supported in this browser.'));
+      return false;
+    }
+    
+    // Create a recognition instance if it doesn't exist
+    if (!recognitionRef.current) {
+      // Get the appropriate SpeechRecognition constructor
+      const SpeechRecognitionAPI = (window as any).SpeechRecognition || 
+                                  (window as any).webkitSpeechRecognition;
+      
+      if (!SpeechRecognitionAPI) {
+        console.error("❌ SpeechRecognition API not available");
+        setError(new Error('Speech recognition API not available.'));
+        return false;
+      }
+      
+      console.log("🎤 Initializing speech recognition with enhanced settings...");
+      recognitionRef.current = new SpeechRecognitionAPI();
+      
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = language;
+      
+      // Use generic approach to avoid type errors
+      try {
+        const recognitionWithExtras = recognitionRef.current as any;
+        if (typeof recognitionWithExtras.maxAlternatives !== 'undefined') {
+          recognitionWithExtras.maxAlternatives = 3;
+        }
+      } catch (e) {
+        console.log("Browser doesn't support maxAlternatives setting");
+      }
+      
+      recognitionRef.current.onstart = () => {
+        console.log("🎤 Speech recognition started");
+        setIsListening(true);
+        setError(null);
+        if (onListeningChange) {
+          onListeningChange(true);
+        }
+      };
+      
+      recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
+        console.error('Speech recognition error:', event.error);
+        
+        if (event.error === 'no-speech') {
+          // No speech detected, not really an error
+          setError(null);
+        } else if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          setError(new Error(`Microphone access denied: ${event.error}`));
+        } else if (event.error === 'aborted') {
+          // Aborted error is often temporary, so we'll just set a minimal error
+          setError(new Error(`Speech recognition error: ${event.error}`));
+        } else if (event.error === 'network') {
+          // Network errors might be temporary, try to reinitialize
+          recognitionRef.current = null;
+          setTimeout(() => {
+            if (initRecognition()) {
+              startListeningImpl();
+            }
+          }, 1000);
+          setError(new Error('Network error, attempting to reconnect...'));
+        } else {
+          setError(new Error(`Speech recognition error: ${event.error}`));
+        }
+      };
+      
+      recognitionRef.current.onend = () => {
+        console.log("🎤 Speech recognition ended");
+        setIsListening(false);
+        if (onListeningChange) {
+          onListeningChange(false);
+        }
+      };
+      
+      recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+            setIsProcessing(true);
+            console.log("🔊 Final transcript:", finalTranscript);
+            if (onProcessingChange) {
+              onProcessingChange(true);
+            }
+          } else {
+            interimTranscript += transcript;
+            console.log("🔊 Interim transcript:", interimTranscript);
+          }
+        }
+        
+        const currentTranscript = finalTranscript || interimTranscript;
+        setTranscript(currentTranscript);
+        
+        if (finalTranscript && onResult) {
+          // Submit final transcript to callback
+          console.log("✅ Sending transcript to processing:", finalTranscript);
+          onResult(finalTranscript);
+          
+          // Reset after processing
+          setTimeout(() => {
+            setIsProcessing(false);
+            if (onProcessingChange) {
+              onProcessingChange(false);
+            }
+          }, 500);
+        }
+      };
+    }
+    
+    return true;
+  }, [language, onListeningChange, onProcessingChange, onResult]);
 
   // Measure audio level with enhanced detection
   const measureAudioLevel = useCallback(() => {
@@ -261,125 +381,8 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     animationFrameRef.current = requestAnimationFrame(measureAudioLevel);
   }, [isListening, onAudioLevelChange, hasSpeechBeenDetected, minSpeechLevel, silenceThreshold, silenceTimeout, onSpeechDetected, stopListening]);
 
-  // Initialize speech recognition
-  const initRecognition = useCallback(() => {
-    // Check for browser support
-    if (!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
-      setError(new Error('Speech recognition not supported in this browser.'));
-      return false;
-    }
-    
-    // Create a recognition instance if it doesn't exist
-    if (!recognitionRef.current) {
-      // Get the appropriate SpeechRecognition constructor
-      const SpeechRecognitionAPI = (window as any).SpeechRecognition || 
-                                  (window as any).webkitSpeechRecognition;
-      
-      if (!SpeechRecognitionAPI) {
-        console.error("❌ SpeechRecognition API not available");
-        setError(new Error('Speech recognition API not available.'));
-        return false;
-      }
-      
-      console.log("🎤 Initializing speech recognition with enhanced settings...");
-      recognitionRef.current = new SpeechRecognitionAPI();
-      
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-      recognitionRef.current.lang = language;
-      
-      // Use generic approach to avoid type errors
-      try {
-        (recognitionRef.current as any).maxAlternatives = 3;
-      } catch (e) {
-        console.log("Browser doesn't support maxAlternatives setting");
-      }
-      
-      recognitionRef.current.onstart = () => {
-        console.log("🎤 Speech recognition started");
-        setIsListening(true);
-        setError(null);
-        if (onListeningChange) {
-          onListeningChange(true);
-        }
-      };
-      
-      recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
-        console.error('Speech recognition error:', event.error);
-        
-        if (event.error === 'no-speech') {
-          // No speech detected, not really an error
-          setError(null);
-        } else if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-          setError(new Error(`Microphone access denied: ${event.error}`));
-        } else if (event.error === 'aborted') {
-          // Aborted error is often temporary, so we'll just set a minimal error
-          setError(new Error(`Speech recognition error: ${event.error}`));
-        } else if (event.error === 'network') {
-          // Network errors might be temporary, try to reinitialize
-          recognitionRef.current = null;
-          setTimeout(() => {
-            if (initRecognition()) {
-              startListening();
-            }
-          }, 1000);
-          setError(new Error('Network error, attempting to reconnect...'));
-        } else {
-          setError(new Error(`Speech recognition error: ${event.error}`));
-        }
-      };
-      
-      recognitionRef.current.onend = () => {
-        console.log("🎤 Speech recognition ended");
-        setIsListening(false);
-        if (onListeningChange) {
-          onListeningChange(false);
-        }
-      };
-      
-      recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
-        let interimTranscript = '';
-        let finalTranscript = '';
-        
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript;
-            setIsProcessing(true);
-            console.log("🔊 Final transcript:", finalTranscript);
-            if (onProcessingChange) {
-              onProcessingChange(true);
-            }
-          } else {
-            interimTranscript += transcript;
-            console.log("🔊 Interim transcript:", interimTranscript);
-          }
-        }
-        
-        const currentTranscript = finalTranscript || interimTranscript;
-        setTranscript(currentTranscript);
-        
-        if (finalTranscript && onResult) {
-          // Submit final transcript to callback
-          console.log("✅ Sending transcript to processing:", finalTranscript);
-          onResult(finalTranscript);
-          
-          // Reset after processing
-          setTimeout(() => {
-            setIsProcessing(false);
-            if (onProcessingChange) {
-              onProcessingChange(false);
-            }
-          }, 500);
-        }
-      };
-    }
-    
-    return true;
-  }, [language, onListeningChange, onProcessingChange, onResult, startListening]);
-
-  // Start listening with retry mechanism
-  const startListening = useCallback(async () => {
+  // Start listening implementation without any reference to the hook's returned method
+  const startListeningImpl = async () => {
     try {
       console.log("🎤 Starting speech recognition and audio monitoring...");
       
@@ -404,7 +407,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
           // Try to re-init recognition after a delay
           setTimeout(() => {
             if (initRecognition()) {
-              startListening();
+              startListeningImpl();
             }
           }, 1000);
         }
@@ -441,6 +444,11 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       console.error('Error starting speech recognition:', err);
       setError(err instanceof Error ? err : new Error('Failed to start speech recognition'));
     }
+  };
+
+  // Public startListening function to be exposed by the hook
+  const startListening = useCallback(async () => {
+    await startListeningImpl();
   }, [initAudioContext, measureAudioLevel, initRecognition]);
 
   // Clean up on unmount
@@ -488,3 +496,4 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     hasSpeechBeenDetected
   };
 };
+
