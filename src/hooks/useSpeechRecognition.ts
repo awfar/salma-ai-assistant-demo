@@ -32,6 +32,7 @@ interface SpeechRecognition extends EventTarget {
   continuous: boolean;
   interimResults: boolean;
   lang: string;
+  maxAlternatives?: number; // Added this property as optional
   start: () => void;
   stop: () => void;
   onresult: (event: SpeechRecognitionEvent) => void;
@@ -130,7 +131,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     }
   }, []);
 
-  // Stop listening functionality - define this first so it can be referenced
+  // Define stopListening first so it can be referenced by other functions
   const stopListening = useCallback(() => {
     try {
       if (recognitionRef.current) {
@@ -286,7 +287,12 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = language;
-      recognitionRef.current.maxAlternatives = 3; // Get more alternatives
+      
+      // Check if the browser supports maxAlternatives before setting it
+      if ('maxAlternatives' in recognitionRef.current) {
+        // Use type assertion to tell TypeScript this is safe
+        (recognitionRef.current as any).maxAlternatives = 3; // Get more alternatives
+      }
       
       recognitionRef.current.onstart = () => {
         console.log("🎤 Speech recognition started");
@@ -311,7 +317,11 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
         } else if (event.error === 'network') {
           // Network errors might be temporary, try to reinitialize
           recognitionRef.current = null;
-          setTimeout(() => initRecognition(), 1000);
+          setTimeout(() => {
+            if (initRecognition()) {
+              startListening();
+            }
+          }, 1000);
           setError(new Error('Network error, attempting to reconnect...'));
         } else {
           setError(new Error(`Speech recognition error: ${event.error}`));
