@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import SoundWave from "@/components/SoundWave";
@@ -133,7 +132,7 @@ const AICallDemo = () => {
           handleAudioEnded(); // نستدعي هذا لضمان الاستمرار في تدفق البرنامج
         }
       } else {
-        // إذا كان الصوت متوقفًا، نتخطى مرحلة الصوت
+        // إذا كان الصوت متوقفًا، نتخطي مرحلة الصوت
         console.log("🔇 تخطي تشغيل الصوت (مكتوم أو غير نشط)");
         handleAudioEnded();
       }
@@ -642,7 +641,7 @@ const AICallDemo = () => {
       {/* مشغل الصوت (مخفي) */}
       <AudioPlayer 
         audioSource={audioSource} 
-        autoPlay={!isMuted && callActive && isSpeakerOn} 
+        autoPlay={!isMuted && callActive && isSpeakerOn ? true : false} 
         onEnded={handleAudioEnded}
         onPlay={() => setIsSpeaking(true)}
         onError={(e) => {
