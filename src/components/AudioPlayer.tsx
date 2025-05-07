@@ -63,6 +63,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         // Setup new source
         audioRef.current.src = audioSource;
         
+        // Ensure autoPlay is treated as a boolean
         if (autoPlay === true) {
           // Small delay to ensure audio loads
           const timer = setTimeout(() => playAudio(), 100);
