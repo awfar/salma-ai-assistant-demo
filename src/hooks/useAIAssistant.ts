@@ -111,13 +111,12 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
         throw new Error("لم يتم إرجاع أي بيانات صوتية");
       }
       
-      // Callback for start of synthesis
-      callbacks?.onStart && callbacks.onStart();
-      
       // Create audio URL from base64
       const audioUrl = `data:audio/mp3;base64,${data.audio}`;
-      
       console.log("✅ تم تحويل النص إلى كلام بنجاح");
+      
+      // Callback for start of synthesis
+      callbacks?.onStart && callbacks.onStart();
       
       return audioUrl;
     } catch (error) {

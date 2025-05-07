@@ -37,6 +37,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
               await playPromise;
               isPlayingRef.current = true;
               if (onPlay) onPlay();
+              console.log("✅ تشغيل الصوت ناجح");
             }
           }
         } catch (error) {
@@ -106,6 +107,10 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
           console.log("🔊 تم تحميل بيانات الصوت بنجاح");
         };
         
+        audioRef.current.oncanplaythrough = () => {
+          console.log("🔊 الصوت جاهز للتشغيل من البداية إلى النهاية دون توقف");
+        };
+        
         // Set the new source
         audioRef.current.src = audioSource;
         audioRef.current.volume = isMuted ? 0 : volume;
@@ -132,6 +137,17 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
                     // حاول مرة أخرى إذا كان الخطأ بسبب تفاعل المستخدم
                     if (playError.name === "NotAllowedError") {
                       console.log("⚠️ يحتاج تفاعل المستخدم لتشغيل الصوت");
+                      // محاولة تشغيل الصوت يدويًا بعد التفاعل الأول مع الصفحة
+                      document.addEventListener('click', function audioClickHandler() {
+                        if (audioRef.current) {
+                          audioRef.current.play().then(() => {
+                            isPlayingRef.current = true;
+                            if (onPlay) onPlay();
+                            console.log("✅ بدأ تشغيل الصوت بعد تفاعل المستخدم");
+                          }).catch(e => console.error("❌ فشلت المحاولة اليدوية لتشغيل الصوت:", e));
+                        }
+                        document.removeEventListener('click', audioClickHandler);
+                      }, { once: true });
                     }
                   }
                 }
@@ -194,15 +210,48 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         }
       };
       
-      // Add listeners for user interaction
-      document.addEventListener('touchstart', handleUserInteraction, { once: true });
-      document.addEventListener('click', handleUserInteraction, { once: true });
+      // Add listeners for user interaction - with higher priority than other click handlers
+      document.addEventListener('touchstart', handleUserInteraction, { once: true, capture: true });
+      document.addEventListener('click', handleUserInteraction, { once: true, capture: true });
       
       return () => {
-        document.removeEventListener('touchstart', handleUserInteraction);
-        document.removeEventListener('click', handleUserInteraction);
+        document.removeEventListener('touchstart', handleUserInteraction, { capture: true });
+        document.removeEventListener('click', handleUserInteraction, { capture: true });
       };
     }, [audioSource, autoPlay, isMuted, onPlay]);
+
+    // Create an audio unlock mechanism for iOS/Safari
+    useEffect(() => {
+      // Function to unlock audio on iOS
+      const unlockAudio = () => {
+        if (!audioRef.current) return;
+        
+        // Play and immediately pause to unlock audio on iOS
+        const promise = audioRef.current.play();
+        if (promise !== undefined) {
+          promise.then(() => {
+            // Audio is now unlocked, pause it
+            audioRef.current?.pause();
+            audioRef.current && (audioRef.current.currentTime = 0);
+            console.log("🔓 تم فتح قفل تشغيل الصوت على نظام iOS");
+          }).catch(e => {
+            console.log("لم يتم فتح قفل الصوت:", e);
+          });
+        }
+      };
+      
+      // Create and remove event listeners for audio unlock
+      const events = ['touchstart', 'touchend', 'mousedown', 'keydown'];
+      events.forEach(event => {
+        document.body.addEventListener(event, unlockAudio, { once: true });
+      });
+      
+      return () => {
+        events.forEach(event => {
+          document.body.removeEventListener(event, unlockAudio);
+        });
+      };
+    }, []);
     
     // Clean up on unmount
     useEffect(() => {
