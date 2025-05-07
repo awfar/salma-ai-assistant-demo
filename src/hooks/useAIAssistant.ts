@@ -164,11 +164,16 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       callbacks?.onStart?.();
 
       // استدعاء وظيفة دفق النص إلى كلام
-      const response = await fetch(`${supabase.functions.url}/text-to-speech`, {
+      // Fix: Don't use protected 'url' property, construct URL directly
+      const functionUrl = `${window.location.protocol}//${window.location.hostname}${window.location.hostname === 'localhost' ? ':54321' : ''}/functions/v1/text-to-speech`;
+      
+      // Fix: Don't access non-existent 'session' property
+      const response = await fetch(functionUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${supabase.auth.session()?.access_token || ''}`,
+          // Use the auth headers differently without session()
+          "Authorization": `Bearer ${supabase.auth.getSession?.() ? (await supabase.auth.getSession()).data.session?.access_token : ''}`,
         },
         body: JSON.stringify({ 
           text, 
@@ -245,8 +250,10 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
         }
       }
 
-      // ابدأ تشغيل الدفق
-      return await stream.arrayBuffer();
+      // Fix: Change the return type expectation
+      // Instead of returning the ArrayBuffer result, we process it and return void
+      await stream.arrayBuffer();
+      return;
       
     } catch (error) {
       console.error("❌ خطأ في تدفق النص إلى كلام:", error);
@@ -259,7 +266,7 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
         variant: "destructive",
       });
     }
-  }, [toast, supabase]);
+  }, [toast]);
   
   // Convert text to speech (old method for compatibility)
   const textToSpeech = useCallback(async (text: string, callbacks?: TextToSpeechCallbacks): Promise<string | null> => {
