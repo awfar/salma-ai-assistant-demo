@@ -22,11 +22,16 @@ const TranscriptBar: React.FC<TranscriptBarProps> = ({
       // إخفاء النص تلقائيًا بعد انتهاء التحدث بثانية أو ثانيتين
       const timer = setTimeout(() => {
         setIsVisible(false);
-      }, 2000);
+      }, 4000);
       
       return () => clearTimeout(timer);
-    } else {
-      setIsVisible(false);
+    } else if (!isActive) {
+      // Add a slight delay before hiding when isActive becomes false
+      const timer = setTimeout(() => {
+        setIsVisible(false);
+      }, 1000);
+      
+      return () => clearTimeout(timer);
     }
   }, [text, isActive]);
   
@@ -35,7 +40,7 @@ const TranscriptBar: React.FC<TranscriptBarProps> = ({
   return (
     <div 
       className={cn(
-        "py-3 px-4 bg-ministry-dark/30 backdrop-blur-lg rounded-lg max-w-md mx-auto transition-all duration-500 text-center",
+        "py-3 px-4 bg-ministry-dark/60 backdrop-blur-lg rounded-lg max-w-md mx-auto transition-all duration-500 text-center shadow-lg",
         isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none",
         className
       )}

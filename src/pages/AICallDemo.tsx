@@ -31,12 +31,17 @@ const AICallDemo = () => {
   const [callStartTime, setCallStartTime] = useState<Date>(new Date());
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentTranscript, setCurrentTranscript] = useState("");
-  const [isSpeakerOn, setIsSpeakerOn] = useState(true); // إضافة حالة لمكبر الصوت
+  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const { toast } = useToast();
   
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  const audioControllerRef = useRef<{ pause: () => void, isPlaying: boolean } | null>(null);
+  const audioControllerRef = useRef<{ 
+    pause: () => void;
+    play: () => Promise<void>;
+    isPlaying: boolean; 
+  } | null>(null);
   const firstMessagePlayed = useRef(false);
+  const autoListenTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // الأسئلة المقترحة
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([
@@ -49,7 +54,12 @@ const AICallDemo = () => {
   ]);
 
   // الحصول على المساعد الذكي
-  const { askAssistant, textToSpeech, isLoading: isAIThinking } = useAIAssistant();
+  const { 
+    askAssistant, 
+    textToSpeech, 
+    isLoading: isAIThinking,
+    isAudioLoading 
+  } = useAIAssistant();
   
   // التعرف على الكلام
   const { 
@@ -58,9 +68,16 @@ const AICallDemo = () => {
     stopListening,
     transcript,
     isProcessing: isTranscribing,
-    error: speechError
+    error: speechError,
+    resetTranscript
   } = useSpeechRecognition({
-    onResult: handleTranscriptResult
+    onResult: handleTranscriptResult,
+    onListeningChange: (listening) => {
+      console.log("🎤 حالة الاستماع:", listening ? "نشط" : "متوقف");
+    },
+    onProcessingChange: (processing) => {
+      console.log("🎤 حالة المعالجة:", processing ? "جاري المعالجة" : "متوقف");
+    }
   });
   
   // إضافة رسالة جديدة
@@ -83,27 +100,91 @@ const AICallDemo = () => {
     if (!text.trim()) return;
     
     // إضافة رسالة المستخدم
+    console.log("👤 رسالة المستخدم:", text.trim());
     addMessage(text.trim(), "user");
+    resetTranscript();
     
     // الحصول على رد من المساعد الذكي
     const aiResponse = await askAssistant(text.trim());
     
     if (aiResponse) {
+      console.log("🤖 رد المساعد الذكي:", aiResponse);
+      
       // إضافة رد المساعد
       addMessage(aiResponse, "assistant");
       
       // تحويل النص إلى كلام
-      const audioUrl = await textToSpeech(aiResponse);
-      if (audioUrl && callActive && !isMuted) {
-        setIsSpeaking(true);
-        setAudioSource(audioUrl);
+      if (callActive && !isMuted && isSpeakerOn) {
+        const audioUrl = await textToSpeech(aiResponse, {
+          onStart: () => {
+            console.log("🔊 بدء تشغيل الصوت");
+            setIsSpeaking(true);
+          },
+          onEnd: () => {
+            console.log("🔊 انتهاء تشغيل الصوت");
+            setIsSpeaking(false);
+          }
+        });
+        
+        if (audioUrl) {
+          setAudioSource(audioUrl);
+        } else {
+          console.error("❌ فشل في الحصول على URL للصوت");
+          handleAudioEnded(); // نستدعي هذا لضمان الاستمرار في تدفق البرنامج
+        }
+      } else {
+        // إذا كان الصوت متوقفًا، نتخطى مرحلة الصوت
+        console.log("🔇 تخطي تشغيل الصوت (مكتوم أو غير نشط)");
+        handleAudioEnded();
+      }
+    } else {
+      console.error("❌ لم يتم الحصول على رد من المساعد الذكي");
+      toast({
+        title: "خطأ في الحصول على الرد",
+        description: "لم نتمكن من الحصول على رد من المساعد الذكي. يرجى المحاولة مرة أخرى.",
+        variant: "destructive",
+      });
+      
+      // بدء الاستماع مرة أخرى
+      if (callActive && !isMuted) {
+        scheduleListening(1000);
       }
     }
   }
 
+  // جدولة بدء الاستماع بعد فترة زمنية
+  const scheduleListening = (delay: number = 500) => {
+    if (autoListenTimeoutRef.current) {
+      clearTimeout(autoListenTimeoutRef.current);
+    }
+    
+    autoListenTimeoutRef.current = setTimeout(() => {
+      if (callActive && !isListening && !isTranscribing && !isAIThinking && !isSpeaking && !isMuted) {
+        console.log("🔄 جدولة بدء الاستماع تلقائيًا");
+        startListening();
+      }
+    }, delay);
+  };
+
   // معالجة اختيار سؤال مقترح
   const handleQuestionSelect = async (question: string) => {
-    if (!callActive || isSpeaking || isTranscribing || isAIThinking) return;
+    if (!callActive || isSpeaking || isTranscribing || isAIThinking || isListening) {
+      console.log("❌ لا يمكن معالجة السؤال المقترح الآن:", {
+        callActive,
+        isSpeaking,
+        isTranscribing,
+        isAIThinking,
+        isListening
+      });
+      return;
+    }
+    
+    // إيقاف الاستماع الحالي إن وُجد
+    if (isListening) {
+      stopListening();
+    }
+    
+    console.log("📝 معالجة سؤال مقترح:", question);
     
     // إضافة السؤال كرسالة مستخدم
     addMessage(question, "user");
@@ -116,10 +197,24 @@ const AICallDemo = () => {
       addMessage(aiResponse, "assistant");
       
       // تحويل النص إلى كلام
-      const audioUrl = await textToSpeech(aiResponse);
-      if (audioUrl && callActive && !isMuted) {
-        setIsSpeaking(true);
-        setAudioSource(audioUrl);
+      if (callActive && !isMuted && isSpeakerOn) {
+        const audioUrl = await textToSpeech(aiResponse, {
+          onStart: () => setIsSpeaking(true),
+          onEnd: () => setIsSpeaking(false)
+        });
+        
+        if (audioUrl) {
+          setAudioSource(audioUrl);
+        } else {
+          handleAudioEnded();
+        }
+      } else {
+        handleAudioEnded();
+      }
+    } else {
+      // بدء الاستماع مرة أخرى
+      if (callActive && !isMuted) {
+        scheduleListening(1000);
       }
     }
   };
@@ -152,11 +247,23 @@ const AICallDemo = () => {
         addMessage(welcomeMessage, "assistant");
         
         // تحويل النص إلى صوت
-        const audioUrl = await textToSpeech(welcomeMessage);
-        if (audioUrl && callActive && !isMuted) {
-          setIsSpeaking(true);
-          setAudioSource(audioUrl);
+        if (isSpeakerOn) {
+          const audioUrl = await textToSpeech(welcomeMessage, {
+            onStart: () => setIsSpeaking(true),
+            onEnd: () => setIsSpeaking(false)
+          });
+          
+          if (audioUrl) {
+            setAudioSource(audioUrl);
+            firstMessagePlayed.current = true;
+          } else {
+            // في حال فشل تحويل النص إلى صوت، نبدأ الاستماع مباشرة
+            firstMessagePlayed.current = true;
+            handleAudioEnded();
+          }
+        } else {
           firstMessagePlayed.current = true;
+          handleAudioEnded();
         }
       }, 500);
       
@@ -178,13 +285,9 @@ const AICallDemo = () => {
     
     if (callActive && !isMuted && firstMessagePlayed.current) {
       // تأخير قصير قبل بدء الاستماع
-      setTimeout(() => {
-        if (callActive && !isListening && !isTranscribing && !isAIThinking) {
-          startListening();
-        }
-      }, 300);
+      scheduleListening(800);
     }
-  }, [callActive, isMuted, isListening, isTranscribing, isAIThinking, startListening]);
+  }, [callActive, isMuted]);
 
   // إيقاف الصوت الحالي
   const stopCurrentAudio = useCallback(() => {
@@ -201,6 +304,10 @@ const AICallDemo = () => {
         stopListening();
       }
       stopCurrentAudio();
+      
+      if (autoListenTimeoutRef.current) {
+        clearTimeout(autoListenTimeoutRef.current);
+      }
     }
   }, [callActive, isListening, stopListening, stopCurrentAudio]);
 
@@ -224,21 +331,27 @@ const AICallDemo = () => {
   const handleMuteClick = () => {
     setIsMuted(!isMuted);
     
-    // إذا تم الكتم، إيقاف الصوت الحالي
+    // إذا تم الكتم، إيقاف الصوت الحالي والاستماع
     if (!isMuted) {
       stopCurrentAudio();
-    }
-    
-    toast({
-      title: isMuted ? "تم تشغيل الميكروفون" : "تم كتم الميكروفون",
-      duration: 2000,
-    });
-    
-    // إذا تم إلغاء الكتم وليس هناك صوت يعمل، ابدأ الاستماع
-    if (isMuted && callActive && !isSpeaking && !isListening && !isTranscribing && !isAIThinking) {
-      setTimeout(() => {
-        startListening();
-      }, 300);
+      if (isListening) {
+        stopListening();
+      }
+      
+      toast({
+        title: "تم كتم الميكروفون",
+        duration: 2000,
+      });
+    } else {
+      toast({
+        title: "تم تشغيل الميكروفون",
+        duration: 2000,
+      });
+      
+      // إذا تم إلغاء الكتم وليس هناك صوت يعمل، ابدأ الاستماع
+      if (callActive && !isSpeaking && !isListening && !isTranscribing && !isAIThinking) {
+        scheduleListening(800);
+      }
     }
   };
 
@@ -246,11 +359,15 @@ const AICallDemo = () => {
   const handleSpeakerClick = () => {
     setIsSpeakerOn(!isSpeakerOn);
     toast({
-      title: isSpeakerOn ? "تم تشغيل مكبر الصوت" : "تم إيقاف مكبر الصوت",
+      title: isSpeakerOn ? "تم إيقاف مكبر الصوت" : "تم تشغيل مكبر الصوت",
       duration: 2000,
     });
     
-    // هنا يمكن إضافة منطق للتحكم في مستوى الصوت إذا لزم الأمر
+    // إيقاف الصوت الحالي إذا تم إيقاف مكبر الصوت
+    if (isSpeakerOn && isSpeaking) {
+      stopCurrentAudio();
+      handleAudioEnded();
+    }
   };
 
   // إنهاء المكالمة
@@ -274,19 +391,48 @@ const AICallDemo = () => {
   };
 
   // إعداد مرجع للتحكم في مشغل الصوت
-  const setupAudioController = useCallback((controller: { pause: () => void, isPlaying: boolean } | null) => {
+  const setupAudioController = useCallback((controller: { 
+    pause: () => void;
+    play: () => Promise<void>;
+    isPlaying: boolean; 
+  } | null) => {
     audioControllerRef.current = controller;
   }, []);
 
   // إعادة المحاولة عند وجود خطأ في التعرف على الصوت
   useEffect(() => {
-    if (speechError && callActive && !isSpeaking && !isListening && !isTranscribing) {
+    if (speechError && callActive && !isSpeaking && !isListening && !isTranscribing && !isAIThinking) {
       console.log("محاولة إعادة تشغيل الميكروفون بعد الخطأ:", speechError);
-      setTimeout(() => {
-        startListening();
-      }, 1000);
+      scheduleListening(2000);
     }
-  }, [speechError, callActive, isSpeaking, isListening, isTranscribing, startListening]);
+  }, [speechError, callActive, isSpeaking, isListening, isTranscribing, isAIThinking]);
+
+  // تنظيف المؤقتات عند إلغاء التحميل
+  useEffect(() => {
+    return () => {
+      if (autoListenTimeoutRef.current) {
+        clearTimeout(autoListenTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // إعادة تشغيل الصوت إذا كان مصدر الصوت موجودًا ولكن لم يبدأ التشغيل
+  useEffect(() => {
+    if (audioSource && !isSpeaking && callActive && !isMuted && isSpeakerOn && audioControllerRef.current) {
+      // تأخير قصير ثم محاولة تشغيل الصوت مرة أخرى إذا لم يكن قيد التشغيل
+      const timer = setTimeout(() => {
+        if (audioControllerRef.current && !audioControllerRef.current.isPlaying) {
+          console.log("🔄 محاولة إعادة تشغيل الصوت");
+          audioControllerRef.current.play().catch(() => {
+            console.error("❌ فشل في إعادة تشغيل الصوت");
+            handleAudioEnded();
+          });
+        }
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [audioSource, isSpeaking, callActive, isMuted, isSpeakerOn, handleAudioEnded]);
 
   return (
     <div className="flex flex-col min-h-screen bg-ministry-light">
@@ -381,12 +527,12 @@ const AICallDemo = () => {
               <div className="absolute bottom-32 left-0 right-0 z-20 px-4">
                 <TranscriptBar 
                   text={currentTranscript} 
-                  isActive={isSpeaking || isListening} 
+                  isActive={isSpeaking || (isListening && transcript)} 
                 />
               </div>
               
               {/* شريط الأسئلة المقترحة */}
-              <div className="absolute bottom-20 left-0 right-0 z-20 px-2">
+              <div className="absolute bottom-24 left-0 right-0 z-20 px-2">
                 <SuggestedQuestions 
                   questions={suggestedQuestions} 
                   onQuestionSelect={handleQuestionSelect} 
@@ -432,6 +578,18 @@ const AICallDemo = () => {
                     ))}
                   </div>
                   <span className="text-xs text-white bg-green-500/80 px-2 py-0.5 rounded-full">جاري الاستماع</span>
+                </div>
+              )}
+              
+              {/* عرض أيقونة لمعالجة الصوت */}
+              {isAudioLoading && (
+                <div className="absolute top-16 left-4 flex items-center gap-2 animate-pulse">
+                  <div className="flex space-x-1 rtl:space-x-reverse">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '200ms' }}></div>
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '400ms' }}></div>
+                  </div>
+                  <span className="text-xs text-white bg-blue-400/80 px-2 py-0.5 rounded-full">جاري تجهيز الصوت</span>
                 </div>
               )}
               
@@ -484,8 +642,13 @@ const AICallDemo = () => {
       {/* مشغل الصوت (مخفي) */}
       <AudioPlayer 
         audioSource={audioSource} 
-        autoPlay={!isMuted && callActive} 
+        autoPlay={!isMuted && callActive && isSpeakerOn} 
         onEnded={handleAudioEnded}
+        onPlay={() => setIsSpeaking(true)}
+        onError={(e) => {
+          console.error("❌ خطأ في تشغيل الصوت:", e);
+          handleAudioEnded();
+        }}
         ref={setupAudioController}
       />
     </div>

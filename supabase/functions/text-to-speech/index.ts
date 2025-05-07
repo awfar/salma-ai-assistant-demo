@@ -59,11 +59,11 @@ serve(async (req) => {
 
     console.log("تم تحويل النص إلى كلام بنجاح، جاري معالجة البيانات الصوتية");
 
-    // الحصول على البيانات الصوتية وتحويلها إلى Base64
+    // الحصول على البيانات الصوتية
     const audioArrayBuffer = await response.arrayBuffer();
-    const audioBase64 = btoa(
-      String.fromCharCode(...new Uint8Array(audioArrayBuffer))
-    );
+    
+    // تحويل ArrayBuffer إلى Base64 بطريقة آمنة
+    const audioBase64 = bufferToBase64(audioArrayBuffer);
 
     return new Response(
       JSON.stringify({
@@ -92,3 +92,17 @@ serve(async (req) => {
     );
   }
 });
+
+// تحويل ArrayBuffer إلى Base64 بطريقة آمنة ومُحسّنة
+function bufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 1024;
+  
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.slice(i, Math.min(i + chunkSize, bytes.length));
+    binary += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  
+  return btoa(binary);
+}
