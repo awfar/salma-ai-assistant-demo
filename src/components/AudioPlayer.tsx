@@ -4,7 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 
 interface AudioPlayerProps {
   audioSource?: string;
-  autoPlay?: boolean;
+  autoPlay: boolean; // Strictly enforcing boolean type
   onEnded?: () => void;
   onPlay?: () => void;
   onError?: (error: any) => void;
@@ -63,10 +63,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         // Setup new source
         audioRef.current.src = audioSource;
         
-        // Ensure autoPlay is treated as a strict boolean
-        const shouldAutoPlay = Boolean(autoPlay);
-        
-        if (shouldAutoPlay) {
+        if (autoPlay) {
           // Small delay to ensure audio loads
           const timer = setTimeout(() => playAudio(), 100);
           return () => clearTimeout(timer);

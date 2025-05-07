@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Volume2, Volume } from "lucide-react";
 import CallTimer from "@/components/CallTimer";
@@ -22,11 +23,11 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   callStartTime, 
   onEndCall 
 }) => {
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
   const [audioSource, setAudioSource] = useState<string | undefined>();
-  const [currentTranscript, setCurrentTranscript] = useState("");
-  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
+  const [currentTranscript, setCurrentTranscript] = useState<string>("");
+  const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(true);
   const { toast } = useToast();
   
   // References
@@ -36,7 +37,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     play: () => Promise<void>;
     isPlaying: boolean; 
   } | null>(null);
-  const firstMessagePlayed = useRef(false);
+  const firstMessagePlayed = useRef<boolean>(false);
   const autoListenTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // The AI assistant hook
@@ -505,10 +506,10 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         </div>
       </div>
       
-      {/* Hidden audio player - Fix the autoPlay prop type */}
+      {/* Hidden audio player */}
       <AudioPlayer 
         audioSource={audioSource} 
-        autoPlay={Boolean(isSpeakerOn && !isMuted)}
+        autoPlay={isSpeakerOn && !isMuted ? true : false}
         onEnded={handleAudioEnded}
         onPlay={() => setIsSpeaking(true)}
         onError={(e) => {
