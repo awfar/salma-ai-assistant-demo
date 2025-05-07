@@ -99,7 +99,7 @@ const AICallDemo = () => {
     if (!text.trim()) return;
     
     // إضافة رسالة المستخدم
-    console.log("👤 رسالة المستخدم:", text.trim());
+    console.log("👤 رسالة المست��دم:", text.trim());
     addMessage(text.trim(), "user");
     resetTranscript();
     
@@ -211,7 +211,7 @@ const AICallDemo = () => {
         handleAudioEnded();
       }
     } else {
-      // بدء الاس��ماع مرة أخرى
+      // بدء الاس����ماع مرة أخرى
       if (callActive && !isMuted) {
         scheduleListening(1000);
       }
@@ -641,7 +641,7 @@ const AICallDemo = () => {
       {/* مشغل الصوت (مخفي) */}
       <AudioPlayer 
         audioSource={audioSource} 
-        autoPlay={Boolean(callActive && !isMuted && isSpeakerOn)}
+        autoPlay={!!(callActive && !isMuted && isSpeakerOn)}
         onEnded={handleAudioEnded}
         onPlay={() => setIsSpeaking(true)}
         onError={(e) => {
