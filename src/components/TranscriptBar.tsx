@@ -41,6 +41,7 @@ const TranscriptBar: React.FC<TranscriptBarProps> = ({
     }
   }, [text, isActive, autoHide, hideDelay]);
   
+  // Don't render anything if there's no text
   if (!text) return null;
   
   return (

@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 // Define SpeechRecognition interfaces for TypeScript
@@ -52,7 +51,11 @@ interface UseSpeechRecognitionOptions {
   onListeningChange?: (listening: boolean) => boolean | void;
   onProcessingChange?: (processing: boolean) => void;
   onAudioLevelChange?: (level: number) => void;
+  onSpeechDetected?: () => void; // New callback for when speech is first detected
   language?: string;
+  silenceThreshold?: number; // Threshold for considering audio as silence
+  silenceTimeout?: number; // How long silence should last before stopping (ms)
+  minSpeechLevel?: number; // Minimum level to consider as speech
 }
 
 export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) => {
@@ -61,7 +64,11 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     onListeningChange,
     onProcessingChange,
     onAudioLevelChange,
+    onSpeechDetected,
     language = 'ar-EG',
+    silenceThreshold = 0.05,
+    silenceTimeout = 800,
+    minSpeechLevel = 0.1,
   } = options;
 
   // States
@@ -70,6 +77,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
   const [isProcessing, setIsProcessing] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [error, setError] = useState<Error | null>(null);
+  const [hasSpeechBeenDetected, setHasSpeechBeenDetected] = useState(false);
   
   // References
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -79,10 +87,15 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
   const animationFrameRef = useRef<number | null>(null);
   const initAttemptRef = useRef<number>(0);
   const maxInitAttempts = 3;
+  const lastAudioLevelTimestampRef = useRef<number>(Date.now());
+  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const speechDetectedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const volumeHistoryRef = useRef<number[]>([]);
   
   // Reset transcript
   const resetTranscript = useCallback(() => {
     setTranscript('');
+    setHasSpeechBeenDetected(false);
   }, []);
 
   // Initialize audio context for level detection
@@ -92,6 +105,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         
         if (!mediaStreamRef.current) {
+          console.log("🎤 Requesting microphone access...");
           mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ 
             audio: {
               echoCancellation: true,
@@ -108,12 +122,12 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
         source.connect(analyserRef.current);
         console.log("✅ Audio analyzer set up successfully");
       } catch (err) {
-        console.error('Error initializing audio context:', err);
+        console.error('❌ Error initializing audio context:', err);
       }
     }
   }, []);
 
-  // Measure audio level
+  // Measure audio level with enhanced detection
   const measureAudioLevel = useCallback(() => {
     if (!analyserRef.current || !isListening) return;
     
@@ -131,17 +145,68 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     const normalizedValue = Math.min(average / 128, 1);
     setAudioLevel(normalizedValue);
     
-    // Log periodically, not for every frame
-    if (Math.random() < 0.01 && normalizedValue > 0.1) {
-      console.log(`📊 Capturing audio level: ${normalizedValue.toFixed(2)}, bytes: ${dataArray.length}`);
+    // Keep a small history of volume levels for smoother detection
+    volumeHistoryRef.current.push(normalizedValue);
+    if (volumeHistoryRef.current.length > 5) {
+      volumeHistoryRef.current.shift();
     }
     
+    // Calculate average of recent volume levels
+    const recentAverage = volumeHistoryRef.current.reduce((a, b) => a + b, 0) / volumeHistoryRef.current.length;
+    
+    // Detect speech vs silence
+    if (recentAverage > minSpeechLevel && !hasSpeechBeenDetected) {
+      console.log(`🔊 Speech detected! Level: ${recentAverage.toFixed(2)}`);
+      setHasSpeechBeenDetected(true);
+      lastAudioLevelTimestampRef.current = Date.now();
+      
+      // Trigger speech detected callback after a short confirmation period
+      if (speechDetectedTimeoutRef.current) {
+        clearTimeout(speechDetectedTimeoutRef.current);
+      }
+      
+      speechDetectedTimeoutRef.current = setTimeout(() => {
+        if (onSpeechDetected && recentAverage > minSpeechLevel) {
+          onSpeechDetected();
+        }
+      }, 150); // Short delay to confirm it's not just a spike
+      
+    } else if (recentAverage > silenceThreshold) {
+      // Still getting audio, reset silence timestamp
+      lastAudioLevelTimestampRef.current = Date.now();
+      
+      // Clear any existing silence timeout
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+        silenceTimeoutRef.current = null;
+      }
+    } else if (hasSpeechBeenDetected) {
+      // Check if we've been silent for too long
+      const timeSinceLastSound = Date.now() - lastAudioLevelTimestampRef.current;
+      if (timeSinceLastSound > 300 && !silenceTimeoutRef.current) {
+        // Start silence timeout
+        silenceTimeoutRef.current = setTimeout(() => {
+          if (isListening) {
+            console.log(`🔇 Silence detected for ${silenceTimeout}ms, stopping listening`);
+            stopListening();
+          }
+          silenceTimeoutRef.current = null;
+        }, silenceTimeout);
+      }
+    }
+    
+    // Log audio level periodically (but not too often)
+    if (Math.random() < 0.01) {
+      console.log(`📊 Audio level: ${normalizedValue.toFixed(2)}, Recent avg: ${recentAverage.toFixed(2)}`);
+    }
+    
+    // Callback for audio level
     if (onAudioLevelChange) {
       onAudioLevelChange(normalizedValue);
     }
     
     animationFrameRef.current = requestAnimationFrame(measureAudioLevel);
-  }, [isListening, onAudioLevelChange]);
+  }, [isListening, onAudioLevelChange, hasSpeechBeenDetected, minSpeechLevel, silenceThreshold, silenceTimeout, onSpeechDetected]);
 
   // Initialize speech recognition
   const initRecognition = useCallback(() => {
@@ -246,7 +311,17 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
   // Start listening with retry mechanism
   const startListening = useCallback(async () => {
     try {
-      console.log("🎤 Starting speech recognition...");
+      console.log("🎤 Starting speech recognition and audio monitoring...");
+      
+      // Reset speech detection state
+      setHasSpeechBeenDetected(false);
+      volumeHistoryRef.current = [];
+      
+      // Clear any existing timeouts
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+        silenceTimeoutRef.current = null;
+      }
       
       if (!initRecognition()) {
         console.error("❌ Failed to initialize speech recognition");
@@ -312,7 +387,17 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
         animationFrameRef.current = null;
       }
       
+      // Clear all timeouts
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+      }
+      
+      if (speechDetectedTimeoutRef.current) {
+        clearTimeout(speechDetectedTimeoutRef.current);
+      }
+      
       setAudioLevel(0);
+      setHasSpeechBeenDetected(false);
     } catch (err) {
       console.error('Error stopping speech recognition:', err);
     }
@@ -333,6 +418,14 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
         cancelAnimationFrame(animationFrameRef.current);
       }
       
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+      }
+      
+      if (speechDetectedTimeoutRef.current) {
+        clearTimeout(speechDetectedTimeoutRef.current);
+      }
+      
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(track => track.stop());
       }
@@ -351,6 +444,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     resetTranscript,
     isProcessing,
     audioLevel,
-    error
+    error,
+    hasSpeechBeenDetected
   };
 };

@@ -1,166 +1,122 @@
 
-import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState } from "react";
-import { useToast } from "@/hooks/use-toast";
+import React, { useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 
 interface AudioPlayerProps {
   audioSource?: string;
-  autoPlay: boolean; // Strictly enforcing boolean type
+  autoPlay?: boolean;
   onEnded?: () => void;
   onPlay?: () => void;
-  onError?: (error: any) => void;
+  onError?: (error: Error) => void;
+  volume?: number;
 }
 
 interface AudioPlayerRef {
+  play: () => Promise<void>;
   pause: () => void;
   isPlaying: boolean;
-  play: () => Promise<void>;
 }
 
 const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
-  ({ audioSource, autoPlay = true, onEnded, onPlay, onError }, ref) => {
+  ({ audioSource, autoPlay = true, onEnded, onPlay, onError, volume = 1 }, ref) => {
     const audioRef = useRef<HTMLAudioElement | null>(null);
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [playAttempts, setPlayAttempts] = useState(0);
-    const maxPlayAttempts = 5;
-    const { toast } = useToast();
-
+    const isPlayingRef = useRef(false);
+    
     useImperativeHandle(ref, () => ({
-      pause: () => {
-        if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-          setIsPlaying(false);
+      play: async () => {
+        try {
+          if (audioRef.current) {
+            console.log("▶️ Playing audio");
+            await audioRef.current.play();
+            isPlayingRef.current = true;
+            if (onPlay) onPlay();
+          }
+        } catch (error) {
+          console.error("❌ Audio play error:", error);
+          isPlayingRef.current = false;
+          if (onError) onError(error instanceof Error ? error : new Error('Failed to play audio'));
         }
       },
-      isPlaying,
-      play: async () => {
-        if (audioRef.current && audioSource) {
-          setPlayAttempts(0);
-          await playAudio();
+      pause: () => {
+        if (audioRef.current) {
+          console.log("⏸️ Pausing audio");
+          audioRef.current.pause();
+          isPlayingRef.current = false;
         }
+      },
+      get isPlaying() {
+        return isPlayingRef.current;
       }
     }));
-
-    // Reset when audio source changes
+    
+    // Handle audio source changes
+    useEffect(() => {
+      if (!audioSource) return;
+      
+      if (audioRef.current) {
+        audioRef.current.src = audioSource;
+        audioRef.current.load();
+        
+        if (autoPlay) {
+          audioRef.current.play()
+            .then(() => {
+              console.log("▶️ Auto-playing audio");
+              isPlayingRef.current = true;
+              if (onPlay) onPlay();
+            })
+            .catch((error) => {
+              console.error("❌ Auto-play failed:", error);
+              isPlayingRef.current = false;
+              if (onError) onError(error instanceof Error ? error : new Error('Failed to auto-play audio'));
+            });
+        }
+      }
+    }, [audioSource, autoPlay, onPlay, onError]);
+    
+    // Handle volume changes
+    useEffect(() => {
+      if (audioRef.current) {
+        audioRef.current.volume = volume;
+      }
+    }, [volume]);
+    
+    // Create audio element
     useEffect(() => {
       if (!audioRef.current) {
-        // Create audio element if it doesn't exist
         audioRef.current = new Audio();
-        audioRef.current.addEventListener('play', handlePlay);
-        audioRef.current.addEventListener('pause', handlePause);
-        audioRef.current.addEventListener('ended', handleEnded);
-        audioRef.current.addEventListener('error', handleError);
-      }
-      
-      if (audioSource) {
-        console.log("🔊 تعيين مصدر الصوت:", audioSource.substring(0, 50) + "...");
         
-        // Reset player state
-        audioRef.current.pause();
-        setIsPlaying(false);
-        setPlayAttempts(0);
-        
-        // Setup new source
-        audioRef.current.src = audioSource;
-        
-        if (autoPlay === true) {
-          // Small delay to ensure audio loads
-          const timer = setTimeout(() => playAudio(), 100);
-          return () => clearTimeout(timer);
-        }
-      }
-    }, [audioSource, autoPlay]);
-
-    // Attempt to play audio with retry on failure
-    const playAudio = async () => {
-      if (!audioRef.current || !audioSource) return;
-
-      console.log("🎵 محاولة تشغيل الصوت...");
-
-      try {
-        const playPromise = audioRef.current.play();
-        if (playPromise !== undefined) {
-          await playPromise;
-          console.log("✅ بدأ تشغيل الصوت بنجاح");
-          setIsPlaying(true);
-          setPlayAttempts(0);
-          if (onPlay) onPlay();
-        }
-      } catch (e) {
-        console.error("❌ خطأ في تشغيل الصوت:", e);
-        
-        // Retry if possible
-        if (playAttempts < maxPlayAttempts) {
-          console.log(`⚠️ محاولة تشغيل الصوت ${playAttempts + 1}/${maxPlayAttempts}`);
-          setPlayAttempts(prev => prev + 1);
-          // Increase delay between attempts
-          setTimeout(playAudio, 500 * (playAttempts + 1));
-        } else {
-          console.error("❌ فشل تشغيل الصوت بعد عدة محاولات");
-          setIsPlaying(false);
-          
-          toast({
-            title: "فشل تشغيل الصوت",
-            description: "يرجى التأكد من تشغيل الصوت في المتصفح",
-            variant: "destructive",
-          });
-          
-          if (onError) onError(e);
+        // Set event listeners
+        audioRef.current.onended = () => {
+          console.log("🔊 Audio playback ended");
+          isPlayingRef.current = false;
           if (onEnded) onEnded();
-        }
+        };
+        
+        audioRef.current.onerror = (event) => {
+          console.error("❌ Audio error:", event);
+          isPlayingRef.current = false;
+          if (onError) {
+            const error = new Error("Audio playback error");
+            onError(error);
+          }
+        };
+        
+        // Set initial volume
+        audioRef.current.volume = volume;
       }
-    };
-
-    // On play
-    const handlePlay = () => {
-      console.log("🎵 بدأ تشغيل الصوت");
-      setIsPlaying(true);
-      if (onPlay) onPlay();
-    };
-
-    // On pause
-    const handlePause = () => {
-      console.log("⏸️ توقف تشغيل الصوت");
-      setIsPlaying(false);
-    };
-
-    // On ended
-    const handleEnded = () => {
-      console.log("🏁 انتهى تشغيل الصوت");
-      setIsPlaying(false);
-      if (onEnded) onEnded();
-    };
-
-    // Handle errors
-    const handleError = (e: Event) => {
-      const target = e.target as HTMLAudioElement;
-      console.error("❌ حدث خطأ أثناء تشغيل الصوت:", e, target.error);
-      setIsPlaying(false);
       
-      if (onError) onError(target.error);
-      if (onEnded) onEnded();
-      
-      toast({
-        title: "خطأ في تشغيل الصوت",
-        description: `رمز الخطأ: ${target.error?.code || 'غير معروف'}`,
-        variant: "destructive",
-      });
-    };
-
-    // Clean up event listeners
-    useEffect(() => {
       return () => {
+        // Clean up audio element
         if (audioRef.current) {
-          audioRef.current.removeEventListener('play', handlePlay);
-          audioRef.current.removeEventListener('pause', handlePause);
-          audioRef.current.removeEventListener('ended', handleEnded);
-          audioRef.current.removeEventListener('error', handleError);
+          audioRef.current.pause();
+          audioRef.current.src = '';
+          audioRef.current.onended = null;
+          audioRef.current.onerror = null;
+          isPlayingRef.current = false;
         }
       };
-    }, []);
-
-    // Using an empty div instead of an audio element since we manage the audio object directly
-    return <div style={{ display: "none" }}></div>;
+    }, [onEnded, onError, volume]);
+    
+    return null; // Audio player is not visible
   }
 );
 
