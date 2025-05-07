@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 interface TranscriptBarProps {
   text: string;
-  isActive: boolean;
+  isActive: boolean; // Explicitly require boolean
   className?: string;
   autoHide?: boolean;
   hideDelay?: number;
@@ -20,18 +20,18 @@ const TranscriptBar: React.FC<TranscriptBarProps> = ({
   const [isVisible, setIsVisible] = useState(false);
   
   useEffect(() => {
-    if (text && isActive) {
+    if (text && isActive === true) {
       setIsVisible(true);
       
       // Only auto-hide if explicitly requested
-      if (autoHide) {
+      if (autoHide === true) {
         const timer = setTimeout(() => {
           setIsVisible(false);
         }, hideDelay);
         
         return () => clearTimeout(timer);
       }
-    } else if (!isActive && !text) {
+    } else if (isActive === false && !text) {
       // Add a slight delay before hiding when isActive becomes false and no text
       const timer = setTimeout(() => {
         setIsVisible(false);
