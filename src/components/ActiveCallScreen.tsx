@@ -508,7 +508,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
           <button
             className={`relative flex items-center justify-center rounded-full p-4 text-white transition-all transform hover:scale-105 active:scale-95
               ${isSpeakerOn ? 'bg-ministry-green shadow-lg shadow-green-500/30' : 'bg-gray-800 hover:bg-gray-700 shadow-md'}`}
-            onClick={handleSpeakerOn ? handleSpeakerClick : handleSpeakerClick}
+            onClick={handleSpeakerClick}
             title={isSpeakerOn ? "إيقاف مكبر الصوت" : "تشغيل مكبر الصوت"}
           >
             {isSpeakerOn ? (
@@ -529,7 +529,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       {/* Hidden audio player */}
       <AudioPlayer 
         audioSource={audioSource} 
-        autoPlay={isSpeakerOn && !isMuted ? true : false}
+        autoPlay={isSpeakerOn && !isMuted}
         onEnded={handleAudioEnded}
         onPlay={() => setIsSpeaking(true)}
         onError={(e) => {
