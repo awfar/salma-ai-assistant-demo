@@ -164,16 +164,29 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       callbacks?.onStart?.();
 
       // استدعاء وظيفة دفق النص إلى كلام
-      // Fix: Don't use protected 'url' property, construct URL directly
-      const functionUrl = `${window.location.protocol}//${window.location.hostname}${window.location.hostname === 'localhost' ? ':54321' : ''}/functions/v1/text-to-speech`;
+      const protocol = window.location.protocol;
+      const hostname = window.location.hostname;
+      const port = hostname === 'localhost' ? ':54321' : '';
+      const functionUrl = `${protocol}//${hostname}${port}/functions/v1/text-to-speech`;
       
-      // Fix: Don't access non-existent 'session' property
+      // إعداد المصادقة
+      let authHeaders = {};
+      try {
+        const session = await supabase.auth.getSession();
+        if (session?.data?.session?.access_token) {
+          authHeaders = {
+            "Authorization": `Bearer ${session.data.session.access_token}`
+          };
+        }
+      } catch (e) {
+        console.warn("❌ لم نتمكن من الحصول على جلسة المستخدم:", e);
+      }
+
       const response = await fetch(functionUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // Use the auth headers differently without session()
-          "Authorization": `Bearer ${supabase.auth.getSession?.() ? (await supabase.auth.getSession()).data.session?.access_token : ''}`,
+          ...authHeaders
         },
         body: JSON.stringify({ 
           text, 
@@ -182,7 +195,8 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       });
 
       if (!response.ok || !response.body) {
-        throw new Error(`فشل في دفق النص إلى كلام: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`فشل في دفق النص إلى كلام: ${response.status} ${errorText}`);
       }
 
       console.log("✅ تم بدء استقبال دفق الصوت من الخادم");
@@ -219,9 +233,6 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
         }
       });
 
-      // بدء معالجة الدفق
-      const stream = new Response(streamProcessor);
-      
       // معالجة البيانات الصوتية من الدفق
       async function processAudioChunk(chunk: Uint8Array, audioContext: AudioContext) {
         try {
@@ -250,11 +261,9 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
         }
       }
 
-      // Fix: Change the return type expectation
-      // Instead of returning the ArrayBuffer result, we process it and return void
+      // بدء معالجة الدفق
+      const stream = new Response(streamProcessor);
       await stream.arrayBuffer();
-      return;
-      
     } catch (error) {
       console.error("❌ خطأ في تدفق النص إلى كلام:", error);
       setIsAudioLoading(false);

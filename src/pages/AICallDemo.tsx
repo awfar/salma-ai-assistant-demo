@@ -15,32 +15,62 @@ const AICallDemo = () => {
   const [micPermissionGranted, setMicPermissionGranted] = React.useState(false);
   const { toast } = useToast();
   const micInitialized = useRef(false);
+  const audioContextInitialized = useRef(false);
   
-  // Check for microphone permission on load with improved initialization
+  // Check for microphone permission and initialize audio on load
   useEffect(() => {
-    const checkMicPermission = async () => {
+    const initializeAudio = async () => {
       try {
-        console.log("🎤 التحقق من إذن الميكروفون...");
+        console.log("🎤 تهيئة الصوت والميكروفون...");
         
-        if (micInitialized.current) {
+        if (micInitialized.current && audioContextInitialized.current) {
           return;
         }
         
-        // Request microphone permission explicitly to wake up the audio system
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
-          } 
-        });
+        // Initialize AudioContext first to wake up audio system
+        if (!audioContextInitialized.current) {
+          try {
+            const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+            const audioContext = new AudioContext();
+            
+            // Create a short silent buffer and play it to unblock audio
+            const silentBuffer = audioContext.createBuffer(1, 1, 22050);
+            const source = audioContext.createBufferSource();
+            source.buffer = silentBuffer;
+            source.connect(audioContext.destination);
+            source.start();
+            
+            // Resume the audio context if it's suspended
+            if (audioContext.state === 'suspended') {
+              await audioContext.resume();
+            }
+            
+            audioContextInitialized.current = true;
+            console.log("✅ تم تهيئة نظام الصوت بنجاح");
+          } catch (err) {
+            console.error("❌ فشل في تهيئة نظام الصوت:", err);
+          }
+        }
         
-        console.log("✅ تم الحصول على إذن الميكروفون بنجاح");
-        setMicPermissionGranted(true);
-        micInitialized.current = true;
-        
-        // Release the microphone immediately after checking permission
-        stream.getTracks().forEach(track => track.stop());
+        // Request microphone permission with optimal settings for Arabic speech
+        if (!micInitialized.current) {
+          const stream = await navigator.mediaDevices.getUserMedia({ 
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+              sampleRate: 48000
+            } 
+          });
+          
+          console.log("✅ تم الحصول على إذن الميكروفون بنجاح");
+          setMicPermissionGranted(true);
+          micInitialized.current = true;
+          
+          // Release the microphone immediately after checking permission
+          // Individual recordings will request it again as needed
+          stream.getTracks().forEach(track => track.stop());
+        }
       } catch (err) {
         console.error("❌ خطأ في التحقق من أجهزة الإدخال:", err);
         toast({
@@ -52,8 +82,21 @@ const AICallDemo = () => {
       }
     };
     
-    // Run immediately
-    checkMicPermission();
+    // Try to initialize on component mount
+    initializeAudio();
+    
+    // Also attach to user interaction events to help mobile browsers
+    const initOnUserInteraction = () => {
+      initializeAudio();
+    };
+    
+    window.addEventListener('touchstart', initOnUserInteraction, { once: true });
+    window.addEventListener('click', initOnUserInteraction, { once: true });
+    
+    return () => {
+      window.removeEventListener('touchstart', initOnUserInteraction);
+      window.removeEventListener('click', initOnUserInteraction);
+    };
   }, [toast]);
   
   // Handle starting call with push-to-talk mode

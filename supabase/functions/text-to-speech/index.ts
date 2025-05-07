@@ -63,7 +63,7 @@ serve(async (req) => {
       if (!response.ok) {
         const errorText = await response.text();
         console.error("خطأ من Eleven Labs API:", errorText);
-        throw new Error(`فشل في دفق النص إلى كلام: ${response.status}`);
+        throw new Error(`فشل في دفق النص إلى كلام: ${response.status} ${errorText}`);
       }
 
       console.log("تم بدء دفق الصوت بنجاح");
@@ -89,7 +89,7 @@ serve(async (req) => {
       if (!response.ok) {
         const errorText = await response.text();
         console.error("خطأ من Eleven Labs API:", errorText);
-        throw new Error(`فشل في تحويل النص إلى كلام: ${response.status}`);
+        throw new Error(`فشل في تحويل النص إلى كلام: ${response.status} ${errorText}`);
       }
 
       console.log("تم تحويل النص إلى كلام بنجاح، جاري معالجة البيانات الصوتية");
