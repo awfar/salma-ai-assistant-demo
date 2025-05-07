@@ -211,7 +211,7 @@ const AICallDemo = () => {
         handleAudioEnded();
       }
     } else {
-      // بدء الاستماع مرة أخرى
+      // بدء الاس��ماع مرة أخرى
       if (callActive && !isMuted) {
         scheduleListening(1000);
       }
@@ -326,7 +326,7 @@ const AICallDemo = () => {
     }
   }, [isAIThinking, isSpeaking, isListening, stopListening]);
 
-  // معالجة النقر على زر كتم الصوت
+  // معالجة النقر على زر كتم ا��صوت
   const handleMuteClick = () => {
     setIsMuted(!isMuted);
     
@@ -641,7 +641,7 @@ const AICallDemo = () => {
       {/* مشغل الصوت (مخفي) */}
       <AudioPlayer 
         audioSource={audioSource} 
-        autoPlay={Boolean(!isMuted && callActive && isSpeakerOn)}
+        autoPlay={Boolean(callActive && !isMuted && isSpeakerOn)}
         onEnded={handleAudioEnded}
         onPlay={() => setIsSpeaking(true)}
         onError={(e) => {
