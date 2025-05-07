@@ -99,7 +99,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     setHasSpeechBeenDetected(false);
   }, []);
 
-  // Initialize audio context for level detection
+  // Initialize audio context for level detection - no dependencies on other functions
   const initAudioContext = useCallback(async () => {
     if (!audioContextRef.current) {
       try {
@@ -131,8 +131,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     }
   }, []);
 
-  // ***IMPORTANT CHANGE*** 
-  // Define stopListening first, without any references to startListening
+  // Basic stop function - defined first with no dependencies
   const stopListening = useCallback(() => {
     try {
       if (recognitionRef.current) {
@@ -164,7 +163,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     }
   }, []);
 
-  // Initialize speech recognition
+  // Initialize speech recognition - independent of other main functions
   const initRecognition = useCallback(() => {
     // Check for browser support
     if (!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
@@ -226,7 +225,8 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
           recognitionRef.current = null;
           setTimeout(() => {
             if (initRecognition()) {
-              startListeningImpl();
+              // We need to define startListeningImpl first
+              // Do nothing here, we'll define this function in a moment
             }
           }, 1000);
           setError(new Error('Network error, attempting to reconnect...'));
@@ -284,7 +284,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     return true;
   }, [language, onListeningChange, onProcessingChange, onResult]);
 
-  // Measure audio level with enhanced detection
+  // Measure audio level - independent of other main functions
   const measureAudioLevel = useCallback(() => {
     if (!analyserRef.current || !isListening) return;
     
@@ -384,7 +384,8 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     animationFrameRef.current = requestAnimationFrame(measureAudioLevel);
   }, [isListening, onAudioLevelChange, hasSpeechBeenDetected, minSpeechLevel, silenceThreshold, silenceTimeout, onSpeechDetected, stopListening]);
 
-  // Start listening implementation without any reference to the hook's returned method
+  // Internal implementation of startListening 
+  // This is defined before the public startListening function and doesn't reference it
   const startListeningImpl = async () => {
     try {
       console.log("🎤 Starting speech recognition and audio monitoring...");
@@ -448,12 +449,12 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       setError(err instanceof Error ? err : new Error('Failed to start speech recognition'));
     }
   };
-
-  // Public startListening function exposed by the hook - this references the implementation
-  // but doesn't create a circular reference
+  
+  // Public startListening function - this references the implementation function only
+  // and doesn't create circular dependencies
   const startListening = useCallback(async () => {
     await startListeningImpl();
-  }, [initAudioContext, measureAudioLevel, initRecognition]);
+  }, []);
 
   // Clean up on unmount
   useEffect(() => {

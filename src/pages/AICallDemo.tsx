@@ -1,4 +1,3 @@
-
 import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Settings } from "lucide-react";
@@ -16,12 +15,13 @@ const AICallDemo = () => {
   const [micPermissionGranted, setMicPermissionGranted] = React.useState(false);
   const { toast } = useToast();
   
-  // Check for microphone permission on load - with improved initialization
+  // Check for microphone permission on load with improved initialization
   useEffect(() => {
     const checkMicPermission = async () => {
       try {
         console.log("🎤 التحقق من إذن الميكروفون...");
-        // Use a more direct approach to check microphone permissions
+        
+        // Request microphone permission explicitly to wake up the audio system
         const stream = await navigator.mediaDevices.getUserMedia({ 
           audio: {
             echoCancellation: true,
@@ -33,8 +33,10 @@ const AICallDemo = () => {
         console.log("✅ تم الحصول على إذن الميكروفون بنجاح");
         setMicPermissionGranted(true);
         
+        // Create audio context early to avoid auto-play restrictions
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        
         // Test that we're actually getting audio
-        const audioContext = new AudioContext();
         const source = audioContext.createMediaStreamSource(stream);
         const analyser = audioContext.createAnalyser();
         analyser.fftSize = 256;
@@ -51,10 +53,9 @@ const AICallDemo = () => {
         const average = sum / dataArray.length;
         console.log("🎤 مستوى صوت الميكروفون الأولي:", average);
         
-        // Clean up the test stream
+        // Clean up the test stream but keep audio context open
         source.disconnect();
         stream.getTracks().forEach(track => track.stop());
-        audioContext.close();
       } catch (err) {
         console.error("❌ خطأ في التحقق من أجهزة الإدخال:", err);
         toast({
@@ -66,15 +67,16 @@ const AICallDemo = () => {
       }
     };
     
+    // Run immediately
     checkMicPermission();
   }, [toast]);
   
-  // Handle starting call - with more aggressive mic handling
+  // Handle starting call with more immediate initialization
   const handleStartCallClick = async () => {
     try {
       console.log("🎤 طلب إذن الوصول إلى الميكروفون وتهيئة المكالمة...");
       
-      // Create audio context and attempt to warm it up
+      // Create audio context and warm it up immediately
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       
       // Request microphone permission with optimized settings
@@ -87,44 +89,27 @@ const AICallDemo = () => {
         } 
       });
       
-      // Create an analyzer and check audio levels
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      
+      // Create an analyzer and test audio
       const analyser = audioContext.createAnalyser();
       const source = audioContext.createMediaStreamSource(stream);
       analyser.fftSize = 1024; // Higher resolution
       source.connect(analyser);
       
-      // Check audio input is working with better sensitivity
+      // Check audio input is working
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(dataArray);
       
-      // Sample audio multiple times to ensure we're getting data
-      let hasAudio = false;
-      for (let attempt = 0; attempt < 5; attempt++) {
-        analyser.getByteFrequencyData(dataArray);
-        
-        // Calculate average level
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i];
-        }
-        
-        const average = sum / dataArray.length;
-        console.log(`🎤 Test microphone level (attempt ${attempt+1}):`, average);
-        
-        if (average > 0) {
-          hasAudio = true;
-          break;
-        }
-        
-        // Wait a bit before next sample
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+      console.log("🎤 Starting microphone test");
       
-      // Clean up test resources
+      // Clean up test resources - but leave audioContext open
       source.disconnect();
       stream.getTracks().forEach(track => track.stop());
-      audioContext.close();
       
-      // Start call
+      // Start call - the audioContext stays active for the ActiveCallScreen
       setMicPermissionGranted(true);
       setCallActive(true);
       setCallStartTime(new Date());
