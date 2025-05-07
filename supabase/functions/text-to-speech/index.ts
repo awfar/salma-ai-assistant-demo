@@ -3,7 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const ELEVEN_LABS_API_KEY = Deno.env.get("ELEVEN_LABS_API_KEY");
 
-// هذه المعرفات الصوتية من Eleven Labs التي يمكننا استخدامها (لتغييرها لاحقًا)
+// هذه المعرفات الصوتية من Eleven Labs التي يمكننا استخدامها
 // نستخدم افتراضيًا صوت Sarah - لأنثى عربية
 const VOICE_ID = "EXAVITQu4vr4xnSDxMaL"; 
 
