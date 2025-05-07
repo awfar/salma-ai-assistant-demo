@@ -23,7 +23,7 @@ const TranscriptBar: React.FC<TranscriptBarProps> = ({
     if (text && isActive) {
       setIsVisible(true);
       
-      // إخفاء النص تلقائيًا بعد انتهاء التحدث بثانية أو ثانيتين
+      // Only auto-hide if explicitly requested
       if (autoHide) {
         const timer = setTimeout(() => {
           setIsVisible(false);
@@ -31,8 +31,8 @@ const TranscriptBar: React.FC<TranscriptBarProps> = ({
         
         return () => clearTimeout(timer);
       }
-    } else if (!isActive) {
-      // Add a slight delay before hiding when isActive becomes false
+    } else if (!isActive && !text) {
+      // Add a slight delay before hiding when isActive becomes false and no text
       const timer = setTimeout(() => {
         setIsVisible(false);
       }, 1000);

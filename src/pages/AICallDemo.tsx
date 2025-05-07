@@ -19,6 +19,7 @@ const AICallDemo = () => {
   const handleStartCallClick = async () => {
     // Request microphone permission before starting the call
     try {
+      // Explicitly request microphone permissions with optimized parameters
       await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,

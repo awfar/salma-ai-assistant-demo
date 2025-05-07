@@ -10,7 +10,7 @@ interface SoundWaveProps {
 }
 
 const SoundWave = ({ isActive, className, type = "speaking", audioLevel = 0 }: SoundWaveProps) => {
-  // تأثيرات مختلفة للتحدث والاستماع
+  // Different effects for speaking and listening
   const waveBars = type === "speaking" ? 9 : 7;
   const animationClass = type === "speaking" ? "animate-wave" : "animate-blink";
   const barColor = type === "speaking" ? "bg-ministry-green" : "bg-green-500";

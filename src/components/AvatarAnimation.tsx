@@ -20,7 +20,7 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
   const mouthRef = useRef<HTMLDivElement>(null);
   const eyesRef = useRef<HTMLDivElement[]>([]);
 
-  // إضافة حركة بسيطة عند التحدث
+  // Add simple movement when speaking
   useEffect(() => {
     const avatar = avatarRef.current;
     if (!avatar) return;
@@ -56,20 +56,20 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
     };
   }, [isActive]);
 
-  // حركة الفم عند التحدث محسنة - تزامن الشفاه مع الصوت
+  // Enhanced mouth movement when speaking - sync lips with audio
   useEffect(() => {
     if (!mouthRef.current) return;
     
     let animationFrame: number;
     if (isActive) {
-      // إنشاء نمط حركة شفاه أكثر تزامنًا مع الصوت
+      // Create a more synchronized lip pattern with audio
       const mouthPatterns = [
-        { height: 1, width: 12, opacity: 0.6 },  // مغلق
-        { height: 2, width: 11, opacity: 0.7 },  // مفتوح قليلاً
-        { height: 4, width: 10, opacity: 0.8 },  // مفتوح متوسط
-        { height: 5, width: 9, opacity: 0.9 },  // مفتوح كثيرًا
-        { height: 4, width: 10, opacity: 0.85 }, // متوسط
-        { height: 2, width: 11, opacity: 0.75 }, // قليل
+        { height: 1, width: 12, opacity: 0.6 },  // closed
+        { height: 2, width: 11, opacity: 0.7 },  // slightly open
+        { height: 4, width: 10, opacity: 0.8 },  // medium open
+        { height: 5, width: 9, opacity: 0.9 },   // wide open
+        { height: 4, width: 10, opacity: 0.85 }, // medium
+        { height: 2, width: 11, opacity: 0.75 }, // small
       ];
       
       let patternIndex = 0;
@@ -77,18 +77,18 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
       
       const animateMouth = () => {
         if (mouthRef.current) {
-          // تحديث شكل الفم بناءً على النمط الحالي
+          // Update mouth shape based on current pattern
           const pattern = mouthPatterns[patternIndex % mouthPatterns.length];
           
           mouthRef.current.style.height = `${pattern.height}px`;
           mouthRef.current.style.opacity = `${pattern.opacity}`;
           mouthRef.current.style.width = `${pattern.width}%`;
           
-          // التحرك للنمط التالي بسرعة متغيرة
+          // Move to next pattern
           patternIndex++;
           
-          // سرعة متغيرة للتحرك بين الأنماط لمحاكاة الكلام الطبيعي
-          speed = Math.random() * 60 + 50; // بين 50 و110 مللي ثانية
+          // Variable speed for pattern transition to simulate natural speech
+          speed = Math.random() * 60 + 50; // Between 50-110ms
           
           setTimeout(() => {
             animationFrame = requestAnimationFrame(animateMouth);
@@ -96,10 +96,10 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
         }
       };
       
-      // بدء حركة الفم فورًا
+      // Start mouth movement immediately
       animationFrame = requestAnimationFrame(animateMouth);
     } else {
-      // فم مغلق عند عدم التحدث
+      // Mouth closed when not speaking
       mouthRef.current.style.height = "1px";
       mouthRef.current.style.opacity = "0.6";
       mouthRef.current.style.width = "12%";
@@ -115,7 +115,7 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
     };
   }, [isActive]);
 
-  // حركة العيون عند الاستماع والتحدث
+  // Eye movement when listening or speaking
   useEffect(() => {
     const blinkEyes = () => {
       eyesRef.current.forEach(eye => {
@@ -135,7 +135,7 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
     
     let blinkInterval: NodeJS.Timeout;
     if (isActive || isListening) {
-      // عشوائية في وقت الرمش بين 2 و 6 ثواني
+      // Random blink time between 2-6 seconds
       const getRandomBlinkTime = () => Math.floor(Math.random() * 4000) + 2000;
       const setupNextBlink = () => {
         blinkInterval = setTimeout(() => {
@@ -170,7 +170,7 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
           )}
         />
         
-        {/* تمثيل الفم للمحاكاة البسيطة - تحسين لتناسب lip sync */}
+        {/* Mouth representation for simple lip sync */}
         <div 
           className="absolute bottom-[26%] left-1/2 transform -translate-x-1/2"
           style={{ width: '12%' }}
@@ -182,7 +182,7 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
           ></div>
         </div>
         
-        {/* تمثيل العيون للرمش */}
+        {/* Eye representation for blinking */}
         <div className="absolute top-[38%] left-[43%] transform -translate-x-1/2 -translate-y-1/2">
           <div 
             ref={(el) => { if (el) eyesRef.current[0] = el; }}
@@ -197,7 +197,7 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
         </div>
       </div>
       
-      {/* حالة الاستماع - محسنة مع تأثير موجات الصوت */}
+      {/* Listening state - enhanced with audio level waves */}
       {isListening && (
         <div className="absolute bottom-16 flex items-center justify-center w-full">
           <div className="flex items-center justify-center bg-green-500/20 backdrop-blur-sm p-2 rounded-full">

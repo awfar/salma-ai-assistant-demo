@@ -65,6 +65,9 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   const handleTranscriptResult = async (text: string) => {
     if (!text.trim()) return;
     
+    // Show current transcript
+    setCurrentTranscript(text.trim());
+    
     // Add user message
     console.log("👤 رسالة المستخدم:", text.trim());
     addMessage(text.trim(), "user");
@@ -152,6 +155,13 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     }, delay);
   };
 
+  // Update current transcript during listening
+  useEffect(() => {
+    if (isListening && transcript) {
+      setCurrentTranscript(transcript);
+    }
+  }, [transcript, isListening]);
+
   // Handle suggested question selection
   const handleQuestionSelect = async (question: string) => {
     if (isSpeaking || isTranscribing || isAIThinking || isListening) {
@@ -170,6 +180,9 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     }
     
     console.log("📝 معالجة سؤال مقترح:", question);
+    
+    // Show question in transcript bar
+    setCurrentTranscript(question);
     
     // Add question as user message
     addMessage(question, "user");
@@ -336,10 +349,16 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     }
   }, [audioSource, isSpeaking, isMuted, isSpeakerOn, handleAudioEnded]);
 
-  // Play welcome message on first render
+  // Play welcome message on first render - ONLY ONCE
   useEffect(() => {
     // Play welcome message after a short delay
     const welcomeTimer = setTimeout(async () => {
+      if (firstMessagePlayed.current) {
+        // If we've already played the welcome message, just start listening
+        scheduleListening(800);
+        return;
+      }
+      
       const welcomeMessage = "مرحباً، أنا سلمى من وزارة التضامن الاجتماعي. كيف يمكنني مساعدتك اليوم؟";
       addMessage(welcomeMessage, "assistant");
       
@@ -352,9 +371,10 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         
         if (audioUrl) {
           setAudioSource(audioUrl);
+          // Mark first message as played to prevent repeating
           firstMessagePlayed.current = true;
         } else {
-          // If text-to-speech fails, start listening directly
+          // If text-to-speech fails, mark as played and start listening
           firstMessagePlayed.current = true;
           handleAudioEnded();
         }
@@ -405,7 +425,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         <TranscriptBar 
           text={currentTranscript} 
           isActive={isSpeaking || (isListening && transcript)} 
-          autoHide={true}
+          autoHide={false}
         />
       </div>
       
@@ -488,7 +508,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
           <button
             className={`relative flex items-center justify-center rounded-full p-4 text-white transition-all transform hover:scale-105 active:scale-95
               ${isSpeakerOn ? 'bg-ministry-green shadow-lg shadow-green-500/30' : 'bg-gray-800 hover:bg-gray-700 shadow-md'}`}
-            onClick={handleSpeakerClick}
+            onClick={handleSpeakerOn ? handleSpeakerClick : handleSpeakerClick}
             title={isSpeakerOn ? "إيقاف مكبر الصوت" : "تشغيل مكبر الصوت"}
           >
             {isSpeakerOn ? (
