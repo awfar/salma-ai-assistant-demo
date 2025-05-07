@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -53,14 +52,14 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         if (audioSource) {
           audioRef.current.src = audioSource;
           
-          if (autoPlay) {
+          if (autoPlay === true) {
             // Small delay to ensure audio loads
             const timer = setTimeout(() => playAudio(), 100);
             return () => clearTimeout(timer);
           }
         }
       }
-    }, [audioSource]);
+    }, [audioSource, autoPlay]);
 
     // محاولة تشغيل الصوت مع إعادة المحاولة عند الفشل
     const playAudio = async () => {
