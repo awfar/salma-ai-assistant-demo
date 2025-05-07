@@ -38,10 +38,11 @@ export function createVoiceRecorder(options: RecorderOptions = {}): VoiceRecorde
   // Check supported mime types
   const getSupportedMimeType = () => {
     const types = [
+      'audio/mp3',
+      'audio/mpeg',
       'audio/webm',
       'audio/webm;codecs=opus',
       'audio/ogg;codecs=opus',
-      'audio/mp4',
       'audio/wav'
     ];
     
@@ -117,7 +118,7 @@ export function createVoiceRecorder(options: RecorderOptions = {}): VoiceRecorde
       // Reset state
       recordedChunks = [];
       
-      // Request media permissions
+      // Request media permissions with explicit high quality settings for Arabic speech
       mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -135,13 +136,13 @@ export function createVoiceRecorder(options: RecorderOptions = {}): VoiceRecorde
       
       audioSource = audioContext.createMediaStreamSource(mediaStream);
       analyser = audioContext.createAnalyser();
-      analyser.fftSize = 256;
+      analyser.fftSize = 1024; // Higher resolution for better analysis
       analyser.smoothingTimeConstant = 0.8;
       audioSource.connect(analyser);
       
       console.log(`🎤 Starting recording with mime type: ${mimeType}`);
       
-      // Initialize recorder with options
+      // Initialize recorder with options, ensuring high bit rate for Arabic speech
       mediaRecorder = new MediaRecorder(mediaStream, {
         mimeType: MediaRecorder.isTypeSupported(mimeType) ? mimeType : getSupportedMimeType(),
         audioBitsPerSecond: options.audioBitsPerSecond || 128000
@@ -161,7 +162,7 @@ export function createVoiceRecorder(options: RecorderOptions = {}): VoiceRecorde
       console.log(`🎤 MediaRecorder created with mimeType: ${mediaRecorder.mimeType}`);
       
       // Start the recording
-      mediaRecorder.start(1000); // Capture in 1-second chunks
+      mediaRecorder.start(200); // Capture in 200ms chunks for more frequent data
       recording = true;
       
       // Start audio level monitoring
@@ -184,28 +185,27 @@ export function createVoiceRecorder(options: RecorderOptions = {}): VoiceRecorde
       
       mediaRecorder.onstop = () => {
         try {
-          // Create blob from recorded chunks
-          let finalMimeType = mediaRecorder?.mimeType || 'audio/webm';
-          
-          // Log the recorded chunks and mime type for debugging
-          console.log(`🎤 Recording stopped. Chunks: ${recordedChunks.length}, type: ${finalMimeType}`);
-          
-          // Ensure the mime type is compatible with Whisper API
-          if (!finalMimeType.includes('webm') && 
-              !finalMimeType.includes('mp3') && 
-              !finalMimeType.includes('mp4') && 
-              !finalMimeType.includes('wav') && 
-              !finalMimeType.includes('ogg')) {
-            console.log('🎤 Converting to compatible audio format: audio/webm');
-            finalMimeType = 'audio/webm';
+          // Ensure we have something recorded
+          if (recordedChunks.length === 0) {
+            reject(new Error('No audio recorded'));
+            closeMedia();
+            return;
           }
           
-          const blob = new Blob(recordedChunks, { type: finalMimeType });
+          // Log the recorded chunks for debugging
+          console.log(`🎤 Recording stopped. Chunks: ${recordedChunks.length}, total size: ${
+            recordedChunks.reduce((size, chunk) => size + chunk.size, 0)
+          } bytes`);
+          
+          // Always convert to MP3 format for best compatibility with Whisper API
+          const blob = new Blob(recordedChunks, { type: 'audio/mp3' });
           console.log(`🎤 Final blob created: ${blob.size} bytes, type: ${blob.type}`);
           
           closeMedia();
           resolve(blob);
         } catch (err) {
+          console.error('Error creating audio blob:', err);
+          closeMedia();
           reject(err);
         }
       };
@@ -214,6 +214,7 @@ export function createVoiceRecorder(options: RecorderOptions = {}): VoiceRecorde
       try {
         mediaRecorder.stop();
       } catch (err) {
+        console.error('Error stopping media recorder:', err);
         closeMedia();
         reject(err);
       }

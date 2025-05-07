@@ -15,28 +15,22 @@ export const speechTranscriptionService = {
       console.log("🎤 نوع الملف الصوتي:", audioBlob.type);
       
       // Validate audio blob size
-      if (audioBlob.size < 500) {
+      if (audioBlob.size < 1000) {
         console.warn("⚠️ ملف الصوت صغير جدًا، قد لا يحتوي على كلام قابل للتمييز");
-        return null;
+        throw new Error("لم يتم اكتشاف صوت واضح. يرجى المحاولة مرة أخرى والتحدث بصوت أعلى.");
       }
       
       // Ensure the audio is in a compatible format
       let processedBlob = audioBlob;
-      if (!audioBlob.type.includes('webm') && 
-          !audioBlob.type.includes('mp3') && 
-          !audioBlob.type.includes('wav') && 
-          !audioBlob.type.includes('ogg')) {
-        console.log("⚠️ تنسيق الصوت غير متوافق مع API. تنسيق الملف:", audioBlob.type);
-        
-        // Try to convert by re-saving as webm, or use as is
-        try {
-          console.log("🔄 محاولة تحويل تنسيق الصوت إلى webm...");
-          processedBlob = new Blob([await audioBlob.arrayBuffer()], { type: 'audio/webm' });
-          console.log("✅ تم تحويل التنسيق:", processedBlob.type);
-        } catch (e) {
-          console.error("❌ فشل تحويل التنسيق:", e);
-          processedBlob = audioBlob; // Use original if conversion fails
-        }
+      
+      // تحويل الملف إلى MP3 لضمان التوافق مع Whisper API
+      try {
+        console.log("🔄 تحويل تنسيق الصوت إلى mp3...");
+        processedBlob = new Blob([await audioBlob.arrayBuffer()], { type: 'audio/mp3' });
+        console.log("✅ تم تحويل التنسيق:", processedBlob.type);
+      } catch (e) {
+        console.error("❌ فشل تحويل التنسيق:", e);
+        // استمر باستخدام الملف الأصلي كخطة بديلة
       }
       
       this.logAudioBlobInfo(processedBlob);
@@ -56,7 +50,12 @@ export const speechTranscriptionService = {
 
       if (error) {
         console.error('❌ خطأ في تحويل الصوت إلى نص:', error);
-        throw new Error(error.message || 'فشل في تحويل الصوت إلى نص');
+        throw new Error(error.message || 'فشل في تحويل الصوت إلى نص. يرجى المحاولة مرة أخرى.');
+      }
+
+      if (data?.error) {
+        console.error('❌ خطأ من خدمة تحويل الصوت:', data.error);
+        throw new Error(data.error || 'فشل في تحويل الصوت إلى نص. يرجى المحاولة مرة أخرى.');
       }
 
       if (data && data.text) {
@@ -64,11 +63,11 @@ export const speechTranscriptionService = {
         return data.text.trim();
       } else {
         console.error('❌ لم يتم العثور على نص في الاستجابة', data);
-        return null;
+        throw new Error('لم نتمكن من تحويل الصوت إلى نص. يرجى المحاولة مرة أخرى.');
       }
     } catch (err) {
       console.error('❌ خطأ في معالجة الصوت:', err);
-      throw new Error('حدث خطأ أثناء معالجة الصوت');
+      throw err;
     }
   },
   

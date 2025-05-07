@@ -56,18 +56,25 @@ serve(async (req) => {
     // معالجة الصوت بشكل متقطع
     const binaryAudio = processBase64Chunks(audio)
     
+    // تحقق إضافي من حجم البيانات
+    if (binaryAudio.length < 500) {
+      console.error("بيانات الصوت صغيرة جداً:", binaryAudio.length, "بايت");
+      throw new Error("بيانات الصوت غير كافية للتحويل");
+    }
+    
     // إعداد FormData
     const formData = new FormData()
     
-    // Determine appropriate mime type - use mp3 which is widely supported by OpenAI
-    const mimeType = 'audio/mp3';
-    const blob = new Blob([binaryAudio], { type: mimeType })
+    // استخدام mp3 لضمان التوافق مع OpenAI
+    const blob = new Blob([binaryAudio], { type: 'audio/mp3' })
     formData.append('file', blob, 'audio.mp3')
     formData.append('model', 'whisper-1')
     formData.append('language', language) // تحديد اللغة 
+    formData.append('response_format', 'json')
 
     console.log("إرسال الطلب إلى OpenAI Whisper API...");
     console.log("مع اللغة المحددة:", language);
+    console.log("حجم الملف:", blob.size, "بايت");
 
     // إرسال إلى OpenAI
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
@@ -81,7 +88,7 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`OpenAI API error: ${errorText}`);
-      throw new Error(`خطأ في OpenAI API: ${response.status}`);
+      throw new Error(`خطأ في OpenAI API: ${response.status} - ${errorText}`);
     }
 
     const result = await response.json();

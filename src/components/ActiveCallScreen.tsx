@@ -41,6 +41,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     isPlaying: boolean; 
   } | null>(null);
   const firstMessagePlayed = useRef<boolean>(false);
+  const welcomeAttempted = useRef<boolean>(false);
   const recorderRef = useRef<VoiceRecorderInterface | null>(null);
   const processingUserInputRef = useRef<boolean>(false);
   const noSpeechTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -97,6 +98,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
 
   // Initialize the voice recorder
   useEffect(() => {
+    console.log("🎤 Initializing voice recorder...");
     recorderRef.current = createVoiceRecorder({
       onAudioLevel: (level) => {
         setAudioLevel(level);
@@ -183,6 +185,13 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
           variant: "destructive",
         });
       }
+    } catch (error) {
+      console.error("❌ Error processing input:", error);
+      toast({
+        title: "خطأ في معالجة المدخلات",
+        description: error instanceof Error ? error.message : "حدث خطأ غير متوقع",
+        variant: "destructive",
+      });
     } finally {
       processingUserInputRef.current = false;
     }
@@ -209,6 +218,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         });
       }
       
+      console.log("🎤 Starting voice recording...");
       await recorderRef.current.startRecording();
       setIsRecording(true);
       setCurrentTranscript("جاري الاستماع...");
@@ -246,10 +256,12 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       setCurrentTranscript("جاري معالجة الصوت...");
       
       // Stop the recording and get the audio blob
+      console.log("🎤 Stopping recording and getting audio blob...");
       const audioBlob = await recorderRef.current.stopRecording();
       
       // If we detected no speech, show a message
       if (noSpeechDetected || audioBlob.size < 1000) {
+        console.warn("⚠️ No speech detected or audio too small:", audioBlob.size);
         showError("لم يتم التقاط صوت، حاول مرة أخرى", 2000);
         return;
       }
@@ -258,17 +270,26 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       
       // Transcribe the audio
       try {
+        console.log("🔄 Transcribing audio...");
         const text = await speechTranscriptionService.transcribeAudio(audioBlob);
         
         if (!text) {
+          console.error("❌ No text returned from transcription");
           throw new Error("Failed to transcribe speech");
         }
+        
+        console.log("✅ Transcription successful:", text);
         
         // Process the transcribed text
         await processUserInput(text);
       } catch (transcriptionError) {
         console.error("❌ Error in transcription:", transcriptionError);
-        showError("لم نتمكن من تحويل الصوت إلى نص. يرجى المحاولة مرة أخرى.", 3000);
+        showError(
+          transcriptionError instanceof Error 
+            ? transcriptionError.message 
+            : "لم نتمكن من تحويل الصوت إلى نص. يرجى المحاولة مرة أخرى.", 
+          3000
+        );
       }
       
     } catch (err) {
@@ -363,43 +384,65 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     };
   }, [stopCurrentAudio, cancelRequest]);
 
-  // Play welcome message on first render - ONLY ONCE
+  // Play welcome message on first render - improved for reliability
   useEffect(() => {
+    // Don't try to play welcome if we've already done it or attempted it
+    if (firstMessagePlayed.current || welcomeAttempted.current) {
+      return;
+    }
+
+    welcomeAttempted.current = true;
+    
     // Play welcome message after a short delay
     const welcomeTimer = setTimeout(async () => {
-      if (firstMessagePlayed.current) {
-        return;
-      }
-      
-      const welcomeMessage = "أهلا بيك في وزارة التضامن الاجتماعي، معاك سلمى مساعدتك الذكية أنا هنا عشان اجاوبك على كل الاستفسارات. اضغط على زر الميكروفون واستمر بالضغط عليه وانت بتتكلم.";
-      console.log("🤖 Welcome message:", welcomeMessage);
-      addMessage(welcomeMessage, "assistant");
-      
-      // Convert text to speech
-      if (isSpeakerOn) {
-        console.log("🔊 Converting welcome message to audio...");
-        const audioUrl = await textToSpeech(welcomeMessage, {
-          onStart: () => setIsSpeaking(true),
-          onEnd: () => {
-            setIsSpeaking(false);
-            console.log("👋 Welcome message finished");
-          }
-        });
+      try {
+        const welcomeMessage = "أهلا بيك في وزارة التضامن الاجتماعي، معاك سلمى مساعدتك الذكية أنا هنا عشان اجاوبك على كل الاستفسارات. اضغط على زر الميكروفون واستمر بالضغط عليه وانت بتتكلم.";
+        console.log("🤖 Playing welcome message:", welcomeMessage);
         
-        if (audioUrl) {
-          setAudioSource(audioUrl);
-          // Mark first message as played to prevent repeating
-          firstMessagePlayed.current = true;
+        // Add message to chat history
+        addMessage(welcomeMessage, "assistant");
+        
+        // Only attempt text to speech if speaker is on
+        if (isSpeakerOn) {
+          console.log("🔊 Converting welcome message to audio...");
+          
+          // First set speaking state to show animation
+          setIsSpeaking(true);
+          
+          const audioUrl = await textToSpeech(welcomeMessage, {
+            onStart: () => {
+              console.log("🔊 Welcome message playback started");
+              setIsSpeaking(true);
+            },
+            onEnd: () => {
+              console.log("🔊 Welcome message finished");
+              setIsSpeaking(false);
+              handleAudioEnded();
+            }
+          });
+          
+          if (audioUrl) {
+            console.log("🔊 Setting welcome audio source");
+            setAudioSource(audioUrl);
+            // Mark message as played
+            firstMessagePlayed.current = true;
+          } else {
+            console.error("❌ Failed to get welcome audio URL");
+            setIsSpeaking(false);
+            handleAudioEnded();
+          }
         } else {
-          // If text-to-speech fails, mark as played
+          // Just mark as played if speaker is off
           firstMessagePlayed.current = true;
+          setIsSpeaking(false);
           handleAudioEnded();
         }
-      } else {
-        firstMessagePlayed.current = true;
+      } catch (error) {
+        console.error("❌ Error playing welcome message:", error);
+        setIsSpeaking(false);
         handleAudioEnded();
       }
-    }, 500);
+    }, 1000); // Slightly longer delay to ensure components are mounted
     
     return () => clearTimeout(welcomeTimer);
   }, [textToSpeech, addMessage, isSpeakerOn, handleAudioEnded]);
