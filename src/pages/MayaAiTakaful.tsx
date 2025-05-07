@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, AlertCircle, ExternalLink, CheckCircle } from "lucide-react";
+import { RefreshCw, AlertCircle, ExternalLink, CheckCircle, Info } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const MayaAiTakaful = () => {
@@ -10,16 +10,24 @@ const MayaAiTakaful = () => {
   const [hasError, setHasError] = useState(false);
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [domainAdded, setDomainAdded] = useState(true); // Assuming domain is already added
+  const [retryCount, setRetryCount] = useState(0);
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'failed'>('connecting');
 
   // Function to capture console errors
   const setupConsoleErrorCapture = () => {
     const originalError = console.error;
     console.error = function(...args) {
-      // Log errors containing "d-id" or "agent"
+      // Log errors containing "d-id" or "agent" or "fetch"
       const errorStr = args.join(' ');
-      if (errorStr.toLowerCase().includes('d-id') || errorStr.toLowerCase().includes('agent') || errorStr.includes('Failed to fetch')) {
+      if (
+        errorStr.toLowerCase().includes('d-id') || 
+        errorStr.toLowerCase().includes('agent') || 
+        errorStr.includes('Failed to fetch') ||
+        errorStr.includes('TypeError')
+      ) {
         setHasError(true);
         setIsLoading(false);
+        setConnectionStatus('failed');
         setErrorDetails(errorStr);
       }
       originalError.apply(console, args);
@@ -35,6 +43,8 @@ const MayaAiTakaful = () => {
     setIsLoading(true);
     setHasError(false);
     setErrorDetails(null);
+    setConnectionStatus('connecting');
+    setRetryCount(prev => prev + 1);
     
     try {
       // Remove any previous script if exists
@@ -42,6 +52,12 @@ const MayaAiTakaful = () => {
       if (existingScript) {
         document.body.removeChild(existingScript);
       }
+      
+      // Clear any existing did-agent containers
+      const existingContainers = document.querySelectorAll('[data-did-agent]');
+      existingContainers.forEach(container => {
+        container.remove();
+      });
       
       const script = document.createElement("script");
       script.type = "module";
@@ -52,10 +68,15 @@ const MayaAiTakaful = () => {
       script.setAttribute("data-agent-id", "agt_nzxp_loq");
       script.setAttribute("data-monitor", "true");
       
+      // Log the current environment
+      console.log("📊 Current URL:", window.location.href);
+      console.log("📊 Current Domain:", window.location.hostname);
+      
       // Add load event listener
       script.onload = () => {
         setIsLoading(false);
         setDomainAdded(true);
+        setConnectionStatus('connected');
         console.log("✅ D-ID script loaded successfully");
         toast.success("تم تحميل الوكيل الافتراضي بنجاح", {
           description: "يمكنك الآن التفاعل مع مايا للتكافل الاجتماعي"
@@ -65,6 +86,7 @@ const MayaAiTakaful = () => {
       script.onerror = (e) => {
         setIsLoading(false);
         setHasError(true);
+        setConnectionStatus('failed');
         setErrorDetails("فشل في تحميل السكريبت من خادم D-ID");
         console.error("❌ Failed to load D-ID script:", e);
         toast.error("فشل في تحميل الوكيل الافتراضي", {
@@ -81,6 +103,7 @@ const MayaAiTakaful = () => {
           (event.target as HTMLScriptElement).dataset.name === 'did-agent') {
           setHasError(true);
           setIsLoading(false);
+          setConnectionStatus('failed');
           setErrorDetails("حدث خطأ أثناء تنفيذ السكريبت");
           console.error("❌ D-ID script error:", event);
         }
@@ -101,6 +124,7 @@ const MayaAiTakaful = () => {
     } catch (err) {
       setIsLoading(false);
       setHasError(true);
+      setConnectionStatus('failed');
       setErrorDetails(err instanceof Error ? err.message : "خطأ غير معروف");
       console.error("❌ Error setting up D-ID script:", err);
       toast.error("خطأ في إعداد الوكيل الافتراضي");
@@ -118,6 +142,7 @@ const MayaAiTakaful = () => {
       if (!agentContainer) {
         setHasError(true);
         setIsLoading(false);
+        setConnectionStatus('failed');
         setErrorDetails("لم يتم تحميل الوكيل بشكل صحيح. قد تكون هناك مشكلة في إعدادات النطاق (Domain)");
       }
     }, 10000); // 10 seconds
@@ -127,6 +152,20 @@ const MayaAiTakaful = () => {
       cleanup();
     };
   }, []);
+
+  // Display a more helpful error message based on the error details
+  const getErrorMessage = () => {
+    if (errorDetails?.includes("Failed to fetch")) {
+      return "فشل الاتصال بخادم D-ID. قد يكون هناك مشكلة في الاتصال بالإنترنت أو قد تكون خدمة D-ID غير متاحة حاليًا.";
+    }
+    if (errorDetails?.includes("TypeError")) {
+      return "حدث خطأ في البرنامج أثناء محاولة الاتصال بالوكيل الافتراضي.";
+    }
+    if (errorDetails?.includes("agent") || errorDetails?.includes("d-id")) {
+      return "حدث خطأ في وكيل D-ID. قد يكون هناك مشكلة في الإعدادات أو الترخيص.";
+    }
+    return "حدث خطأ غير معروف أثناء محاولة تحميل الوكيل الافتراضي. يرجى المحاولة مرة أخرى لاحقًا.";
+  };
 
   return (
     <div className="min-h-screen flex flex-col items-center bg-ministry-light">
@@ -150,6 +189,24 @@ const MayaAiTakaful = () => {
             </AlertDescription>
           </Alert>
         )}
+        
+        {/* Connection status indicator */}
+        <div className="mb-6">
+          {connectionStatus === 'connecting' && (
+            <Alert variant="default" className="bg-blue-50 border-blue-200">
+              <div className="flex items-center">
+                <div className="animate-spin h-4 w-4 border-t-2 border-b-2 border-blue-600 rounded-full mr-2"></div>
+                <AlertTitle className="text-blue-800">جاري الاتصال بالوكيل الافتراضي...</AlertTitle>
+              </div>
+            </Alert>
+          )}
+          {connectionStatus === 'connected' && (
+            <Alert variant="default" className="bg-green-50 border-green-200">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <AlertTitle className="mr-4 text-green-800">تم الاتصال بنجاح</AlertTitle>
+            </Alert>
+          )}
+        </div>
       </div>
       
       {/* Virtual agent interaction area */}
@@ -161,7 +218,8 @@ const MayaAiTakaful = () => {
               <div className="text-center py-10">
                 <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mb-4"></div>
                 <p className="text-gray-500">جاري تحميل الوكيل الافتراضي...</p>
-                <p className="text-gray-400 text-sm mt-2">نحن نستخدم النطاق المضاف حديثًا: https://preview--salma-ai-assistant-demo.lovable.app/</p>
+                <p className="text-gray-400 text-sm mt-2">نحن نستخدم النطاق المضاف: https://preview--salma-ai-assistant-demo.lovable.app/</p>
+                <p className="text-gray-400 text-sm mt-1">محاولة رقم: {retryCount}</p>
               </div>
             )}
             
@@ -175,8 +233,17 @@ const MayaAiTakaful = () => {
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6 max-w-xl mx-auto text-right">
                   <h3 className="font-bold mb-2">سبب المشكلة المحتمل:</h3>
                   <p className="text-gray-700 mb-4">
-                    رغم إضافة النطاق https://preview--salma-ai-assistant-demo.lovable.app/ إلى D-ID، قد تكون هناك حاجة لتأكيد الإعدادات في لوحة التحكم الخاصة بالوكيل.
+                    {getErrorMessage()}
                   </p>
+                  
+                  <Alert variant="default" className="bg-amber-50 border-amber-200 mb-4">
+                    <Info className="h-4 w-4 text-amber-600" />
+                    <AlertTitle className="mr-4 text-amber-800">ملاحظة هامة:</AlertTitle>
+                    <AlertDescription className="mr-4 text-amber-700">
+                      رغم إضافة النطاق <span dir="ltr">https://preview--salma-ai-assistant-demo.lovable.app/</span> إلى منصة D-ID، قد تستغرق التغييرات بعض الوقت لتصبح فعالة. كما قد تكون هناك حاجة لمراجعة إعدادات أخرى في لوحة التحكم الخاصة بـ D-ID.
+                    </AlertDescription>
+                  </Alert>
+                  
                   <p className="text-gray-700">
                     {errorDetails ? (
                       <span className="text-xs font-mono bg-gray-100 p-1 rounded block my-2 overflow-auto max-h-20 dir-ltr text-left">
