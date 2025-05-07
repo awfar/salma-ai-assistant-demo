@@ -56,7 +56,7 @@ serve(async (req) => {
 
     if (stream) {
       // Use the streaming endpoint
-      const streamUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voice}/stream`;
+      const streamUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voice}/stream?optimize_streaming_latency=3`;
       console.log("Using streaming API endpoint:", streamUrl);
 
       const response = await fetch(streamUrl, {

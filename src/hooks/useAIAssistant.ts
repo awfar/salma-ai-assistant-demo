@@ -163,19 +163,15 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       console.log("🔊 Starting text to speech streaming:", text.substring(0, 50) + "...");
       callbacks?.onStart?.();
 
+      // Directly call the Edge Function with fetch to ensure we get the proper stream response
+      const { origin, pathname } = window.location;
+      const endpoint = origin + '/functions/v1/text-to-speech';
+      
+      console.log("🔄 Calling text-to-speech endpoint at:", endpoint);
+
       // Get the authentication session
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData?.session?.access_token;
-      
-      // Get the Supabase project URL
-      const { host, protocol } = window.location;
-      const baseUrl = host.includes('localhost')
-        ? `${protocol}//${host}`
-        : `${protocol}//${host}`;
-      
-      const endpoint = `${baseUrl}/functions/v1/text-to-speech`;
-      
-      console.log("🔄 Calling text-to-speech endpoint at:", endpoint);
 
       // Prepare headers with authentication if available
       const headers: HeadersInit = {
@@ -269,11 +265,21 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       setIsAudioLoading(false);
       callbacks?.onEnd?.();
       
-      toast({
-        title: "Error Converting Text to Speech",
-        description: error instanceof Error ? error.message : "An error occurred while converting text to speech",
-        variant: "destructive",
-      });
+      // Try falling back to non-streaming mode
+      console.log("🔄 Attempting fallback to non-streaming TTS...");
+      try {
+        const audioUrl = await textToSpeech(text, callbacks);
+        if (!audioUrl) {
+          throw new Error("Failed to get audio URL in fallback mode");
+        }
+      } catch (fallbackError) {
+        console.error("❌ Fallback TTS also failed:", fallbackError);
+        toast({
+          title: "Error Converting Text to Speech",
+          description: "All text-to-speech methods failed. Please check your connection and try again.",
+          variant: "destructive",
+        });
+      }
     }
   }, [toast]);
   

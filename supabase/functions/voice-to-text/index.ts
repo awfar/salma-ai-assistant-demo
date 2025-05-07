@@ -53,6 +53,11 @@ serve(async (req) => {
 
     console.log("استلام بيانات صوتية للتحويل إلى نص، حجم البيانات:", audio.length);
 
+    // التحقق من وجود مفتاح الـ API
+    if (!OPENAI_API_KEY) {
+      throw new Error('مفتاح API غير متوفر (OPENAI_API_KEY)')
+    }
+
     // معالجة الصوت بشكل متقطع
     const binaryAudio = processBase64Chunks(audio)
     
