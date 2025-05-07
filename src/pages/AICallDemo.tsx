@@ -641,7 +641,7 @@ const AICallDemo = () => {
       {/* مشغل الصوت (مخفي) */}
       <AudioPlayer 
         audioSource={audioSource} 
-        autoPlay={!isMuted && callActive && isSpeakerOn ? true : false} 
+        autoPlay={Boolean(!isMuted && callActive && isSpeakerOn)}
         onEnded={handleAudioEnded}
         onPlay={() => setIsSpeaking(true)}
         onError={(e) => {
