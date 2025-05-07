@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 // Define SpeechRecognition interfaces for TypeScript
@@ -32,7 +33,6 @@ interface SpeechRecognition extends EventTarget {
   continuous: boolean;
   interimResults: boolean;
   lang: string;
-  maxAlternatives?: number; // Added this property as optional
   start: () => void;
   stop: () => void;
   onresult: (event: SpeechRecognitionEvent) => void;
@@ -52,7 +52,7 @@ interface UseSpeechRecognitionOptions {
   onListeningChange?: (listening: boolean) => boolean | void;
   onProcessingChange?: (processing: boolean) => void;
   onAudioLevelChange?: (level: number) => void;
-  onSpeechDetected?: () => void; // New callback for when speech is first detected
+  onSpeechDetected?: () => void; // Callback for when speech is first detected
   language?: string;
   silenceThreshold?: number; // Threshold for considering audio as silence
   silenceTimeout?: number; // How long silence should last before stopping (ms)
@@ -288,10 +288,11 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = language;
       
-      // Check if the browser supports maxAlternatives before setting it
-      if ('maxAlternatives' in recognitionRef.current) {
-        // Use type assertion to tell TypeScript this is safe
-        (recognitionRef.current as any).maxAlternatives = 3; // Get more alternatives
+      // Use generic approach to avoid type errors
+      try {
+        (recognitionRef.current as any).maxAlternatives = 3;
+      } catch (e) {
+        console.log("Browser doesn't support maxAlternatives setting");
       }
       
       recognitionRef.current.onstart = () => {
@@ -375,7 +376,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     }
     
     return true;
-  }, [language, onListeningChange, onProcessingChange, onResult]);
+  }, [language, onListeningChange, onProcessingChange, onResult, startListening]);
 
   // Start listening with retry mechanism
   const startListening = useCallback(async () => {
@@ -440,7 +441,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       console.error('Error starting speech recognition:', err);
       setError(err instanceof Error ? err : new Error('Failed to start speech recognition'));
     }
-  }, [initRecognition, initAudioContext, measureAudioLevel]);
+  }, [initAudioContext, measureAudioLevel, initRecognition]);
 
   // Clean up on unmount
   useEffect(() => {

@@ -54,7 +54,7 @@ const SuggestedQuestions: React.FC<SuggestedQuestionsProps> = ({
         <ChevronLeft className="h-5 w-5 text-white" />
       </button>
       
-      {/* Suggested questions list */}
+      {/* Suggested questions list with improved clickability */}
       <div
         ref={scrollRef}
         className="flex overflow-x-auto py-3 px-8 scrollbar-hide snap-x gap-2"
@@ -64,8 +64,9 @@ const SuggestedQuestions: React.FC<SuggestedQuestionsProps> = ({
           <button
             key={index}
             onClick={() => handleQuestionClick(question)}
-            className="px-4 py-2 bg-white/25 backdrop-blur-sm text-white border border-white/30 rounded-full text-sm whitespace-nowrap hover:bg-white/40 transition-all snap-start 
-            active:scale-95 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white/50 transform hover:shadow-lg shadow-md"
+            className="px-4 py-2.5 bg-white/25 backdrop-blur-sm text-white border border-white/30 rounded-full text-sm whitespace-nowrap hover:bg-white/40 transition-all snap-start 
+            active:scale-95 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white/50 transform hover:shadow-lg shadow-md cursor-pointer"
+            style={{ touchAction: 'manipulation' }} // Improve touch responsiveness
           >
             {question}
           </button>

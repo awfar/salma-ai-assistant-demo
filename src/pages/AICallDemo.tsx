@@ -16,72 +16,115 @@ const AICallDemo = () => {
   const [micPermissionGranted, setMicPermissionGranted] = React.useState(false);
   const { toast } = useToast();
   
-  // Check for microphone permission on load
+  // Check for microphone permission on load - with improved initialization
   useEffect(() => {
     const checkMicPermission = async () => {
       try {
         console.log("🎤 التحقق من إذن الميكروفون...");
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const hasMic = devices.some(device => device.kind === 'audioinput');
+        // Use a more direct approach to check microphone permissions
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          } 
+        });
         
-        if (!hasMic) {
-          console.warn("⚠️ لم يتم العثور على أي ميكروفون");
-          toast({
-            title: "تحذير",
-            description: "لم يتم العثور على أي ميكروفون متصل",
-            variant: "destructive",
-            duration: 5000,
-          });
+        console.log("✅ تم الحصول على إذن الميكروفون بنجاح");
+        setMicPermissionGranted(true);
+        
+        // Test that we're actually getting audio
+        const audioContext = new AudioContext();
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        
+        // Test for audio level
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
         }
+        
+        const average = sum / dataArray.length;
+        console.log("🎤 مستوى صوت الميكروفون الأولي:", average);
+        
+        // Clean up the test stream
+        source.disconnect();
+        stream.getTracks().forEach(track => track.stop());
+        audioContext.close();
       } catch (err) {
         console.error("❌ خطأ في التحقق من أجهزة الإدخال:", err);
+        toast({
+          title: "تحذير",
+          description: "لم نتمكن من الوصول إلى الميكروفون. يرجى السماح بالوصول للمتابعة.",
+          variant: "destructive",
+          duration: 5000,
+        });
       }
     };
     
     checkMicPermission();
   }, [toast]);
   
-  // Handle starting call
+  // Handle starting call - with more aggressive mic handling
   const handleStartCallClick = async () => {
-    // Request microphone permission before starting the call
     try {
-      console.log("🎤 طلب إذن الوصول إلى الميكروفون...");
+      console.log("🎤 طلب إذن الوصول إلى الميكروفون وتهيئة المكالمة...");
       
-      // Pre-warm the audio context to avoid delays
+      // Create audio context and attempt to warm it up
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       
-      // Explicitly request microphone permissions with optimized parameters
+      // Request microphone permission with optimized settings
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
+          sampleRate: 48000,
         } 
       });
       
-      // Create an analyzer to verify audio input is working
+      // Create an analyzer and check audio levels
       const analyser = audioContext.createAnalyser();
       const source = audioContext.createMediaStreamSource(stream);
+      analyser.fftSize = 1024; // Higher resolution
       source.connect(analyser);
       
-      // Check that we're actually getting audio data
-      analyser.fftSize = 256;
+      // Check audio input is working with better sensitivity
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      analyser.getByteFrequencyData(dataArray);
       
-      // Test for audio level (just log it)
-      let sum = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        sum += dataArray[i];
+      // Sample audio multiple times to ensure we're getting data
+      let hasAudio = false;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        analyser.getByteFrequencyData(dataArray);
+        
+        // Calculate average level
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        
+        const average = sum / dataArray.length;
+        console.log(`🎤 Test microphone level (attempt ${attempt+1}):`, average);
+        
+        if (average > 0) {
+          hasAudio = true;
+          break;
+        }
+        
+        // Wait a bit before next sample
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
-      const average = sum / dataArray.length;
-      console.log("🎤 Initial microphone level:", average);
       
-      // Close the test stream
+      // Clean up test resources
       source.disconnect();
       stream.getTracks().forEach(track => track.stop());
       audioContext.close();
       
+      // Start call
       setMicPermissionGranted(true);
       setCallActive(true);
       setCallStartTime(new Date());
@@ -93,9 +136,7 @@ const AICallDemo = () => {
       });
       
     } catch (err) {
-      console.error("خطأ في الوصول إلى الميكروفون:", err);
-      setMicPermissionGranted(false);
-      
+      console.error("❌ خطأ في الوصول إلى الميكروفون:", err);
       toast({
         title: "خطأ في الوصول إلى الميكروفون",
         description: "يرجى السماح بالوصول إلى الميكروفون لاستخدام المساعد الذكي",

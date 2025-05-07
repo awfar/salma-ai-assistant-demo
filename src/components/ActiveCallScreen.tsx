@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Volume2, Volume } from "lucide-react";
 import CallTimer from "@/components/CallTimer";
@@ -27,7 +28,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   const [audioSource, setAudioSource] = useState<string | undefined>();
   const [currentTranscript, setCurrentTranscript] = useState<string>("");
   const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(true);
-  const [audioMuted, setAudioMuted] = useState<boolean>(false); // New state to track audio muting separately
+  const [audioMuted, setAudioMuted] = useState<boolean>(false); // State to track audio muting separately
   const { toast } = useToast();
   
   // References
@@ -124,7 +125,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         addMessage(aiResponse, "assistant");
         
         // Convert text to speech
-        if (!isMuted && isSpeakerOn) {
+        if (!audioMuted && isSpeakerOn) {
           console.log("🔊 Converting text to speech...");
           const audioUrl = await textToSpeech(aiResponse, {
             onStart: () => {
@@ -209,7 +210,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     onAudioLevelChange: handleAudioLevelChange,
     onSpeechDetected: handleSpeechDetected,
     silenceThreshold: 0.02, // Lower threshold to detect more audio
-    silenceTimeout: 1200, // Slightly longer silence before stopping
+    silenceTimeout: 800, // Silent timeout as requested (800ms)
     minSpeechLevel: 0.06  // Lower threshold to consider as speech
   });
 
@@ -286,7 +287,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     }
   }, [isMuted]);
 
-  // Handle mute button click - Updated to only mute the microphone, not speaker
+  // Handle mute button click - Only mute the microphone, not speaker
   const handleMuteClick = () => {
     const newMutedState = !isMuted;
     setIsMuted(newMutedState);
@@ -314,7 +315,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     }
   };
 
-  // Handle speaker button click - now controls audio muting
+  // Handle speaker button click - controls audio output
   const handleSpeakerClick = () => {
     const newSpeakerState = !isSpeakerOn;
     setIsSpeakerOn(newSpeakerState);
@@ -405,7 +406,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
 
   // Retry playing audio if source exists but not playing
   useEffect(() => {
-    if (audioSource && !isSpeaking && !isMuted && isSpeakerOn && audioControllerRef.current) {
+    if (audioSource && !isSpeaking && !audioMuted && isSpeakerOn && audioControllerRef.current) {
       // Short delay then try playing audio again if not already playing
       const timer = setTimeout(() => {
         if (audioControllerRef.current && !audioControllerRef.current.isPlaying) {
@@ -419,29 +420,71 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       
       return () => clearTimeout(timer);
     }
-  }, [audioSource, isSpeaking, isMuted, isSpeakerOn, handleAudioEnded]);
+  }, [audioSource, isSpeaking, audioMuted, isSpeakerOn, handleAudioEnded]);
 
-  // Pre-initialize microphone
+  // Pre-initialize microphone with force start
   useEffect(() => {
-    // Pre-request microphone permissions
-    navigator.mediaDevices.getUserMedia({ 
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      } 
-    })
-      .then(() => {
-        console.log("✅ Microphone permission granted");
-        // Try to start listening after permissions are granted
-        setTimeout(() => {
-          if (!isSpeaking && !isListening && firstMessagePlayed.current) {
-            startListening();
+    // Force microphone initialization immediately
+    const initializeMic = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          } 
+        });
+        
+        console.log("✅ Microphone permission granted and initialized");
+        
+        // Create temporary audio context to analyze mic input
+        const audioContext = new AudioContext();
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        
+        // Check if we're getting audio input
+        const testAudioLevel = () => {
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+          analyser.getByteFrequencyData(dataArray);
+          
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
           }
-        }, 2000);
-      })
-      .catch(err => console.error("❌ Error accessing microphone:", err));
-  }, []);
+          const avgLevel = sum / dataArray.length / 256;
+          console.log(`🎤 Initial microphone test level: ${avgLevel.toFixed(4)}`);
+          
+          // Try to start listening after permissions are granted
+          if (!isSpeaking) {
+            setTimeout(() => {
+              console.log("🎤 Auto-start listening after mic test");
+              startListening();
+              
+              // Clean up test resources
+              source.disconnect();
+              stream.getTracks().forEach(track => track.stop());
+              audioContext.close();
+            }, 500);
+          }
+        };
+        
+        // Test mic once
+        setTimeout(testAudioLevel, 100);
+      } catch (err) {
+        console.error("❌ Error accessing microphone:", err);
+        toast({
+          title: "لم نتمكن من الوصول للميكروفون",
+          description: "يرجى السماح بالوصول إلى الميكروفون لاستخدام المساعد الذكي",
+          variant: "destructive",
+          duration: 5000,
+        });
+      }
+    };
+    
+    initializeMic();
+  }, [startListening]);
 
   // Play welcome message on first render - ONLY ONCE
   useEffect(() => {
@@ -586,11 +629,11 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         <div 
           className="absolute top-16 left-4 animate-pulse w-10 h-10 rounded-full flex items-center justify-center"
           style={{
-            transform: `scale(${1 + audioLevel * 2.5})`,
-            opacity: Math.min(1, audioLevel + 0.4),
-            backgroundColor: `rgba(52, 211, 153, ${audioLevel * 0.8})`,
+            transform: `scale(${1 + audioLevel * 3.5})`, // Increased scaling for better visibility
+            opacity: Math.min(1, audioLevel + 0.5), // Higher base opacity
+            backgroundColor: `rgba(52, 211, 153, ${audioLevel * 0.9})`, // More vibrant color
             transition: 'transform 100ms ease-out, opacity 100ms ease-out',
-            boxShadow: `0 0 ${15 * audioLevel}px rgba(52, 211, 153, ${audioLevel * 0.8})`,
+            boxShadow: `0 0 ${20 * audioLevel}px rgba(52, 211, 153, ${audioLevel * 0.9})`,
           }}
         >
           <div className="w-5 h-5 bg-green-400 rounded-full" />

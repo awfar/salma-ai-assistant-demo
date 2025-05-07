@@ -8,7 +8,7 @@ interface AudioPlayerProps {
   onPlay?: () => void;
   onError?: (error: Error) => void;
   volume?: number;
-  isMuted?: boolean; // New prop to separately control audio muting
+  isMuted?: boolean; // Prop to separately control audio muting
 }
 
 interface AudioPlayerRef {
@@ -86,19 +86,20 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       }
     }, [volume, isMuted]);
     
-    // Create audio element
+    // Create audio element with proper event handling
     useEffect(() => {
       if (!audioRef.current) {
-        audioRef.current = new Audio();
+        const audio = new Audio();
+        audioRef.current = audio;
         
         // Set event listeners
-        audioRef.current.onended = () => {
+        audio.onended = () => {
           console.log("🔊 Audio playback ended");
           isPlayingRef.current = false;
           if (onEnded) onEnded();
         };
         
-        audioRef.current.onerror = (event) => {
+        audio.onerror = (event) => {
           console.error("❌ Audio error:", event);
           isPlayingRef.current = false;
           if (onError) {
@@ -108,7 +109,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         };
         
         // Set initial volume
-        audioRef.current.volume = isMuted ? 0 : volume;
+        audio.volume = isMuted ? 0 : volume;
       }
       
       return () => {
