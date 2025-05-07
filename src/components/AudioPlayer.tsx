@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -70,18 +69,6 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         }
       }
     }, [audioSource, autoPlay]);
-
-    // Clean up event listeners
-    useEffect(() => {
-      return () => {
-        if (audioRef.current) {
-          audioRef.current.removeEventListener('play', handlePlay);
-          audioRef.current.removeEventListener('pause', handlePause);
-          audioRef.current.removeEventListener('ended', handleEnded);
-          audioRef.current.removeEventListener('error', handleError);
-        }
-      };
-    }, []);
 
     // محاولة تشغيل الصوت مع إعادة المحاولة عند الفشل
     const playAudio = async () => {
@@ -158,6 +145,18 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         variant: "destructive",
       });
     };
+
+    // Clean up event listeners
+    useEffect(() => {
+      return () => {
+        if (audioRef.current) {
+          audioRef.current.removeEventListener('play', handlePlay);
+          audioRef.current.removeEventListener('pause', handlePause);
+          audioRef.current.removeEventListener('ended', handleEnded);
+          audioRef.current.removeEventListener('error', handleError);
+        }
+      };
+    }, []);
 
     // Using an empty div instead of an audio element since we manage the audio object directly
     return <div style={{ display: "none" }}></div>;
