@@ -52,6 +52,8 @@ serve(async (req) => {
       "Accept": stream ? "audio/mpeg" : "audio/mpeg",
       "Content-Type": "application/json",
       "xi-api-key": ELEVEN_LABS_API_KEY,
+      // Add User-Agent header to avoid potential blocking
+      "User-Agent": "ElevenLabsSupabaseFunction/1.0",
     };
 
     if (stream) {
@@ -78,6 +80,7 @@ serve(async (req) => {
         headers: {
           ...corsHeaders,
           "Content-Type": "audio/mpeg",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
         },
       });
     } else {
@@ -122,6 +125,7 @@ serve(async (req) => {
           headers: {
             ...corsHeaders,
             "Content-Type": "application/json",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
           },
         }
       );

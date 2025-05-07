@@ -4,6 +4,7 @@ import { Mic, MicOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import SoundWave from "./SoundWave";
 import { playVerificationSound } from "@/utils/audioUtils";
+import { useToast } from "@/hooks/use-toast";
 
 interface PushToTalkButtonProps {
   onStartRecording: () => void;
@@ -24,9 +25,11 @@ const PushToTalkButton: React.FC<PushToTalkButtonProps> = ({
 }) => {
   const [isPressing, setIsPressing] = useState(false);
   const [showRings, setShowRings] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(false);
   const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const maxRecordingTimeRef = useRef<NodeJS.Timeout | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const { toast } = useToast();
 
   // Initialize audio context for button feedback sounds
   useEffect(() => {
@@ -43,8 +46,14 @@ const PushToTalkButton: React.FC<PushToTalkButtonProps> = ({
         source.start();
         
         console.log("✅ Audio context initialized in PushToTalkButton");
+        setSoundEnabled(true);
       } catch (err) {
         console.error("❌ Failed to initialize audio context in PushToTalkButton:", err);
+        toast({
+          title: "مشكلة في الصوت",
+          description: "لم نتمكن من تهيئة نظام الصوت. انقر على زر تنشيط الصوت في الأسفل.",
+          variant: "destructive",
+        });
       }
     }
     
@@ -54,6 +63,33 @@ const PushToTalkButton: React.FC<PushToTalkButtonProps> = ({
           console.error("❌ Error closing AudioContext:", err);
         });
       }
+    };
+  }, [toast]);
+
+  // Attempt to unlock audio on user interaction
+  useEffect(() => {
+    const unlockAudio = () => {
+      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+        audioContextRef.current.resume().then(() => {
+          console.log("✅ AudioContext resumed on user interaction in PushToTalkButton");
+          setSoundEnabled(true);
+          
+          // Play a verification sound
+          playVerificationSound(false).catch((err) => {
+            console.error("❌ Error playing verification sound:", err);
+          });
+        }).catch(err => {
+          console.error("❌ Failed to resume AudioContext in PushToTalkButton:", err);
+        });
+      }
+    };
+    
+    window.addEventListener('touchstart', unlockAudio, { once: true });
+    window.addEventListener('click', unlockAudio, { once: true });
+    
+    return () => {
+      window.removeEventListener('touchstart', unlockAudio);
+      window.removeEventListener('click', unlockAudio);
     };
   }, []);
 
@@ -68,10 +104,12 @@ const PushToTalkButton: React.FC<PushToTalkButtonProps> = ({
     setShowRings(true);
     
     // Play a feedback sound when button is pressed
-    try {
-      await playVerificationSound(true);
-    } catch (err) {
-      console.error("❌ Failed to play feedback sound:", err);
+    if (soundEnabled) {
+      try {
+        await playVerificationSound(true);
+      } catch (err) {
+        console.error("❌ Failed to play feedback sound:", err);
+      }
     }
     
     // Start recording immediately to improve responsiveness
@@ -103,10 +141,12 @@ const PushToTalkButton: React.FC<PushToTalkButtonProps> = ({
     }
     
     // Play a feedback sound when button is released
-    try {
-      await playVerificationSound(true);
-    } catch (err) {
-      console.error("❌ Failed to play feedback sound:", err);
+    if (soundEnabled) {
+      try {
+        await playVerificationSound(true);
+      } catch (err) {
+        console.error("❌ Failed to play feedback sound:", err);
+      }
     }
     
     // If we were actually recording (not just a quick tap)

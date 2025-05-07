@@ -28,13 +28,13 @@ export function Toaster() {
         const isAudioError = (
           (variant === "destructive") && 
           (
-            (title && (
+            (typeof title === 'string' && (
               title.toLowerCase().includes("audio") || 
               title.toLowerCase().includes("sound") || 
               title.toLowerCase().includes("صوت") ||
               title.includes("تنشيط")
             )) ||
-            (description && (
+            (typeof description === 'string' && (
               description.toLowerCase().includes("audio") || 
               description.toLowerCase().includes("sound") ||
               description.toLowerCase().includes("صوت") ||
@@ -48,7 +48,7 @@ export function Toaster() {
             <div className="grid gap-1">
               {title && (
                 <ToastTitle className="flex items-center gap-2">
-                  {getErrorIcon(variant, title)}
+                  {getErrorIcon(variant, title as string)}
                   {title}
                 </ToastTitle>
               )}

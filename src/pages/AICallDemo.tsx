@@ -351,11 +351,14 @@ const AICallDemo = () => {
         </div>
       )}
       
-      {/* Audio activation button */}
+      {/* Audio activation button - made much more visible and prominent */}
       <button 
-        className="fixed bottom-4 left-4 z-50 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow-md flex items-center gap-2 text-sm"
+        className="fixed bottom-4 left-4 z-50 bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 text-sm font-bold transition-all hover:scale-105 active:scale-95 animate-pulse"
         onClick={handleActivateAudio}
         aria-label="Activate audio"
+        style={{
+          boxShadow: "0 0 15px rgba(34, 197, 94, 0.6)",
+        }}
       >
         {audioInitialization === 'attempting' ? (
           <>
@@ -364,7 +367,7 @@ const AICallDemo = () => {
         ) : audioInitialization === 'success' ? (
           <>🔊 تم تنشيط الصوت</>
         ) : (
-          <>🔊 تنشيط الصوت</>
+          <>🔊 انقر هنا لتنشيط الصوت</>
         )}
       </button>
     </div>
