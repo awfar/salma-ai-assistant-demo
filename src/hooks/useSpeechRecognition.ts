@@ -92,6 +92,9 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const speechDetectedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const volumeHistoryRef = useRef<number[]>([]);
+
+  // Declare stopListening function first as a reference
+  const stopListeningRef = useRef<() => void>(() => {});
   
   // Reset transcript
   const resetTranscript = useCallback(() => {
@@ -127,6 +130,41 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       }
     }
   }, []);
+
+  // Stop listening implementation
+  const stopListening = useCallback(() => {
+    try {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        console.log("🛑 Speech recognition stopped");
+      }
+      
+      // Stop measuring audio level
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      
+      // Clear all timeouts
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+      }
+      
+      if (speechDetectedTimeoutRef.current) {
+        clearTimeout(speechDetectedTimeoutRef.current);
+      }
+      
+      setAudioLevel(0);
+      setHasSpeechBeenDetected(false);
+    } catch (err) {
+      console.error('Error stopping speech recognition:', err);
+    }
+  }, []);
+  
+  // Store stop listening in ref for reference before declaration
+  useEffect(() => {
+    stopListeningRef.current = stopListening;
+  }, [stopListening]);
 
   // Measure audio level with enhanced detection
   const measureAudioLevel = useCallback(() => {
@@ -190,7 +228,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
         silenceTimeoutRef.current = setTimeout(() => {
           if (isListening) {
             console.log(`🔇 Silence detected for ${silenceTimeout}ms, stopping listening`);
-            stopListening();
+            stopListeningRef.current();
           }
           silenceTimeoutRef.current = null;
         }, silenceTimeout);
@@ -208,7 +246,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     }
     
     animationFrameRef.current = requestAnimationFrame(measureAudioLevel);
-  }, [isListening, onAudioLevelChange, hasSpeechBeenDetected, minSpeechLevel, silenceThreshold, silenceTimeout, onSpeechDetected, stopListening]);
+  }, [isListening, onAudioLevelChange, hasSpeechBeenDetected, minSpeechLevel, silenceThreshold, silenceTimeout, onSpeechDetected]);
 
   // Initialize speech recognition
   const initRecognition = useCallback(() => {
@@ -375,36 +413,6 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       setError(err instanceof Error ? err : new Error('Failed to start speech recognition'));
     }
   }, [initRecognition, initAudioContext, measureAudioLevel]);
-
-  // Stop listening
-  const stopListening = useCallback(() => {
-    try {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-        console.log("🛑 Speech recognition stopped");
-      }
-      
-      // Stop measuring audio level
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-      
-      // Clear all timeouts
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current);
-      }
-      
-      if (speechDetectedTimeoutRef.current) {
-        clearTimeout(speechDetectedTimeoutRef.current);
-      }
-      
-      setAudioLevel(0);
-      setHasSpeechBeenDetected(false);
-    } catch (err) {
-      console.error('Error stopping speech recognition:', err);
-    }
-  }, []);
 
   // Clean up on unmount
   useEffect(() => {
