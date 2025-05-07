@@ -1,6 +1,41 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+// Define SpeechRecognition interfaces for TypeScript
+interface SpeechRecognitionEvent {
+  resultIndex: number;
+  results: {
+    [key: number]: {
+      [key: number]: {
+        transcript: string;
+      };
+      isFinal: boolean;
+    };
+  };
+}
+
+interface SpeechRecognitionErrorEvent {
+  error: string;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult: (event: SpeechRecognitionEvent) => void;
+  onerror: (event: SpeechRecognitionErrorEvent) => void;
+  onend: () => void;
+  onstart: () => void;
+}
+
+// Create type for SpeechRecognition constructor
+interface SpeechRecognitionConstructor {
+  new (): SpeechRecognition;
+}
+
+// Define options for the hook
 interface UseSpeechRecognitionOptions {
   onResult?: (transcript: string) => void;
   onListeningChange?: (listening: boolean) => boolean | void;
@@ -26,7 +61,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
   const [error, setError] = useState<Error | null>(null);
   
   // References
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -84,6 +119,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
 
   // Initialize speech recognition
   const initRecognition = useCallback(() => {
+    // Check for browser support
     if (!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
       setError(new Error('Speech recognition not supported in this browser.'));
       return false;
@@ -91,8 +127,11 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     
     // Create a recognition instance if it doesn't exist
     if (!recognitionRef.current) {
-      const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
+      // Get the appropriate SpeechRecognition constructor
+      const SpeechRecognitionAPI = (window as any).SpeechRecognition || 
+                                  (window as any).webkitSpeechRecognition;
+      
+      recognitionRef.current = new SpeechRecognitionAPI();
       
       recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
@@ -106,7 +145,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
         }
       };
       
-      recognitionRef.current.onerror = (event: any) => {
+      recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error('Speech recognition error:', event.error);
         setError(new Error(`Speech recognition error: ${event.error}`));
         
@@ -123,7 +162,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
         }
       };
       
-      recognitionRef.current.onresult = (event: any) => {
+      recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
         let interimTranscript = '';
         let finalTranscript = '';
         
