@@ -21,7 +21,7 @@ const AICallDemo = () => {
   useEffect(() => {
     const initializeAudio = async () => {
       try {
-        console.log("🎤 تهيئة الصوت والميكروفون...");
+        console.log("🎤 Initializing audio and microphone...");
         
         if (micInitialized.current && audioContextInitialized.current) {
           return;
@@ -46,9 +46,9 @@ const AICallDemo = () => {
             }
             
             audioContextInitialized.current = true;
-            console.log("✅ تم تهيئة نظام الصوت بنجاح");
+            console.log("✅ Audio system successfully initialized");
           } catch (err) {
-            console.error("❌ فشل في تهيئة نظام الصوت:", err);
+            console.error("❌ Failed to initialize audio system:", err);
           }
         }
         
@@ -63,7 +63,7 @@ const AICallDemo = () => {
             } 
           });
           
-          console.log("✅ تم الحصول على إذن الميكروفون بنجاح");
+          console.log("✅ Microphone permission granted successfully");
           setMicPermissionGranted(true);
           micInitialized.current = true;
           
@@ -72,10 +72,10 @@ const AICallDemo = () => {
           stream.getTracks().forEach(track => track.stop());
         }
       } catch (err) {
-        console.error("❌ خطأ في التحقق من أجهزة الإدخال:", err);
+        console.error("❌ Error checking input devices:", err);
         toast({
-          title: "تحذير",
-          description: "لم نتمكن من الوصول إلى الميكروفون. يرجى السماح بالوصول للمتابعة.",
+          title: "Warning",
+          description: "Could not access microphone. Please allow access to continue.",
           variant: "destructive",
           duration: 5000,
         });
@@ -102,7 +102,7 @@ const AICallDemo = () => {
   // Handle starting call with push-to-talk mode
   const handleStartCallClick = async () => {
     try {
-      console.log("🎤 طلب إذن الوصول إلى الميكروفون وتهيئة المكالمة...");
+      console.log("🎤 Requesting microphone permission and initializing call...");
       
       // Request microphone permission for push-to-talk
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -123,16 +123,16 @@ const AICallDemo = () => {
       setCallStartTime(new Date());
       
       toast({
-        title: "بدء المكالمة",
-        description: "تم الاتصال بالمساعد الذكي سلمى. اضغط على زر الميكروفون للتحدث.",
+        title: "Call Started",
+        description: "Connected to AI assistant Salma. Press the microphone button to speak.",
         duration: 3000,
       });
       
     } catch (err) {
-      console.error("❌ خطأ في الوصول إلى الميكروفون:", err);
+      console.error("❌ Error accessing microphone:", err);
       toast({
-        title: "خطأ في الوصول إلى الميكروفون",
-        description: "يرجى السماح بالوصول إلى الميكروفون لاستخدام المساعد الذكي",
+        title: "Microphone Access Error",
+        description: "Please allow microphone access to use the AI assistant",
         variant: "destructive",
         duration: 5000,
       });
@@ -144,8 +144,8 @@ const AICallDemo = () => {
     setCallActive(false);
     
     toast({
-      title: "تم إنهاء المكالمة",
-      description: "شكراً لاستخدامك خدمة سلمى المساعد الذكي",
+      title: "Call Ended",
+      description: "Thank you for using Salma AI assistant",
       duration: 3000,
     });
   };

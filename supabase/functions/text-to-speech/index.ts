@@ -3,8 +3,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const ELEVEN_LABS_API_KEY = Deno.env.get("ELEVEN_LABS_API_KEY");
 
-// هذه المعرفات الصوتية من Eleven Labs التي يمكننا استخدامها
-// نستخدم معرّف الصوت المرتبط بالوكيل
+// Voice IDs from Eleven Labs that we can use
+// We use the voice ID associated with the agent
 const VOICE_ID = "xBxkQvOKMczEIbvEjnFZ"; 
 
 const corsHeaders = {
@@ -14,24 +14,24 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // معالجة طلبات CORS
+  // Handle CORS requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // استلام النص المراد تحويله إلى كلام
+    // Get the text to convert to speech
     const { text, voice = VOICE_ID, stream = true } = await req.json();
 
     if (!text) {
-      throw new Error("لم يتم توفير نص للتحويل");
+      throw new Error("No text provided for conversion");
     }
 
-    console.log("محاولة تحويل النص:", text);
-    console.log("استخدام صوت ElevenLabs ID:", voice);
-    console.log("استخدام وضع الدفق (streaming):", stream);
+    console.log("Attempting to convert text:", text);
+    console.log("Using ElevenLabs voice ID:", voice);
+    console.log("Using streaming mode:", stream);
 
-    // الإعدادات المشتركة للطلب
+    // Common request settings
     const requestBody = JSON.stringify({
       text: text,
       model_id: "eleven_multilingual_v2",
@@ -50,9 +50,9 @@ serve(async (req) => {
     };
 
     if (stream) {
-      // استخدام نقطة نهاية الدفق
+      // Use the streaming endpoint
       const streamUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voice}/stream`;
-      console.log("استخدام واجهة برمجة الدفق:", streamUrl);
+      console.log("Using streaming API endpoint:", streamUrl);
 
       const response = await fetch(streamUrl, {
         method: "POST",
@@ -62,13 +62,13 @@ serve(async (req) => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("خطأ من Eleven Labs API:", errorText);
-        throw new Error(`فشل في دفق النص إلى كلام: ${response.status} ${errorText}`);
+        console.error("Error from Eleven Labs API:", errorText);
+        throw new Error(`Failed to stream text to speech: ${response.status} ${errorText}`);
       }
 
-      console.log("تم بدء دفق الصوت بنجاح");
+      console.log("Successfully started audio streaming");
 
-      // إعادة دفق البيانات الصوتية مباشرة للمتصفح
+      // Stream the audio data directly to the browser
       return new Response(response.body, {
         headers: {
           ...corsHeaders,
@@ -76,7 +76,7 @@ serve(async (req) => {
         },
       });
     } else {
-      // استخدام النقطة النهائية العادية (للتوافق)
+      // Use the regular endpoint (for compatibility)
       const response = await fetch(
         `https://api.elevenlabs.io/v1/text-to-speech/${voice}`,
         {
@@ -88,26 +88,26 @@ serve(async (req) => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("خطأ من Eleven Labs API:", errorText);
-        throw new Error(`فشل في تحويل النص إلى كلام: ${response.status} ${errorText}`);
+        console.error("Error from Eleven Labs API:", errorText);
+        throw new Error(`Failed to convert text to speech: ${response.status} ${errorText}`);
       }
 
-      console.log("تم تحويل النص إلى كلام بنجاح، جاري معالجة البيانات الصوتية");
+      console.log("Successfully converted text to speech, processing audio data");
 
-      // الحصول على البيانات الصوتية
+      // Get the audio data
       const audioArrayBuffer = await response.arrayBuffer();
       
-      // التحقق من أن البيانات الصوتية غير فارغة
+      // Verify audio data is not empty
       if (!audioArrayBuffer || audioArrayBuffer.byteLength === 0) {
-        throw new Error("تم استلام بيانات صوتية فارغة من Eleven Labs API");
+        throw new Error("Empty audio data received from Eleven Labs API");
       }
       
-      console.log(`تم استلام بيانات صوتية بحجم: ${audioArrayBuffer.byteLength} بايت`);
+      console.log(`Received audio data of size: ${audioArrayBuffer.byteLength} bytes`);
       
-      // تحويل ArrayBuffer إلى Base64 بطريقة آمنة
+      // Convert ArrayBuffer to Base64 safely
       const audioBase64 = bufferToBase64(audioArrayBuffer);
       
-      console.log(`تم تحويل البيانات الصوتية إلى Base64 بنجاح، الطول: ${audioBase64.length}`);
+      console.log(`Successfully converted audio data to Base64, length: ${audioBase64.length}`);
 
       return new Response(
         JSON.stringify({
@@ -122,7 +122,7 @@ serve(async (req) => {
       );
     }
   } catch (error) {
-    console.error("خطأ في تحويل النص إلى كلام:", error);
+    console.error("Error in text-to-speech conversion:", error);
     return new Response(
       JSON.stringify({
         error: error.message,
@@ -138,7 +138,7 @@ serve(async (req) => {
   }
 });
 
-// تحويل ArrayBuffer إلى Base64 بطريقة آمنة ومُحسّنة
+// Convert ArrayBuffer to Base64 safely and efficiently
 function bufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';

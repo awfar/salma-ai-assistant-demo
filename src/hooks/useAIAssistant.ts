@@ -26,32 +26,32 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
   const abortControllerRef = useRef<AbortController | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   
-  // تهيئة AudioContext
+  // Initialize AudioContext
   useEffect(() => {
-    // تأجيل إنشاء AudioContext حتى يكون هناك تفاعل للمستخدم
+    // Defer creating AudioContext until there's user interaction
     const initAudioContext = () => {
       try {
         if (!audioContextRef.current) {
           const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
           audioContextRef.current = new AudioContextClass();
-          console.log("✅ تم إنشاء AudioContext بنجاح");
+          console.log("✅ AudioContext successfully created");
         }
       } catch (err) {
-        console.error("❌ فشل في إنشاء AudioContext:", err);
+        console.error("❌ Failed to create AudioContext:", err);
       }
     };
 
-    // إضافة معالجات أحداث لتفاعل المستخدم
+    // Add event handlers for user interaction
     const handleUserInteraction = () => {
       initAudioContext();
       
-      // إذا كان AudioContext متوقفًا، قم بتشغيله
+      // If AudioContext is suspended, resume it
       if (audioContextRef.current && audioContextRef.current.state === "suspended") {
         audioContextRef.current.resume();
       }
     };
 
-    // إضافة معالجات للأحداث المختلفة التي تشير إلى تفاعل المستخدم
+    // Add handlers for various events that indicate user interaction
     window.addEventListener("click", handleUserInteraction, { once: true });
     window.addEventListener("touchstart", handleUserInteraction, { once: true });
     window.addEventListener("keydown", handleUserInteraction, { once: true });
@@ -61,10 +61,10 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       window.removeEventListener("touchstart", handleUserInteraction);
       window.removeEventListener("keydown", handleUserInteraction);
       
-      // تنظيف AudioContext عند إزالة المكون
+      // Clean up AudioContext when component unmounts
       if (audioContextRef.current) {
         audioContextRef.current.close().catch(err => {
-          console.error("❌ خطأ عند إغلاق AudioContext:", err);
+          console.error("❌ Error closing AudioContext:", err);
         });
       }
     };
@@ -73,7 +73,7 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
   // Cancel any in-progress requests
   const cancelRequest = useCallback(() => {
     if (abortControllerRef.current) {
-      console.log("🛑 إلغاء الطلب الجاري معالجته");
+      console.log("🛑 Canceling in-progress request");
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
       setIsLoading(false);
@@ -92,7 +92,7 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
     try {
       setIsLoading(true);
       
-      console.log("🤖 إرسال سؤال إلى المساعد الذكي:", question);
+      console.log("🤖 Sending question to AI assistant:", question);
       
       // Use the AI assistant Supabase Edge Function
       const { data, error } = await supabase.functions.invoke('ai-assistant', {
@@ -100,29 +100,29 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       });
       
       if (error) {
-        console.error("خطأ في سؤال المساعد:", error);
+        console.error("Error asking assistant:", error);
         throw new Error(error.message);
       }
       
       if (!data || !data.response) {
-        console.error("لم يتم استلام أي رد من المساعد الذكي");
-        throw new Error("لم نتمكن من الحصول على رد من المساعد الذكي");
+        console.error("No response received from AI assistant");
+        throw new Error("Could not get a response from the AI assistant");
       }
       
-      console.log("✅ تم استلام رد من المساعد الذكي:", data.response.substring(0, 50) + "...");
+      console.log("✅ Received response from AI assistant:", data.response.substring(0, 50) + "...");
       
       return data.response;
     } catch (error) {
-      console.error("خطأ في سؤال المساعد:", error);
+      console.error("Error asking assistant:", error);
       
       if (error instanceof Error && error.name === "AbortError") {
-        console.log("🛑 تم إلغاء الطلب");
+        console.log("🛑 Request was canceled");
         return null;
       }
       
       toast({
-        title: "خطأ في الاتصال",
-        description: "لم نتمكن من الاتصال بالمساعد الذكي. يرجى المحاولة مرة أخرى.",
+        title: "Connection Error",
+        description: "Could not connect to the AI assistant. Please try again.",
         variant: "destructive",
       });
       
@@ -132,62 +132,65 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
     }
   }, [toast, cancelRequest]);
   
-  // طريقة جديدة لدفق الصوت مباشرة من ElevenLabs
+  // New method to stream audio directly from ElevenLabs
   const streamToSpeech = useCallback(async (text: string, callbacks?: TextToSpeechCallbacks): Promise<void> => {
     if (!text.trim()) {
-      console.error("❌ النص فارغ، لا يمكن تحويله إلى صوت");
+      console.error("❌ Text is empty, cannot convert to speech");
       return;
     }
 
     try {
       setIsAudioLoading(true);
       
-      // التأكد من وجود مستمع صوتي
+      // Ensure we have an audio context
       if (!audioContextRef.current) {
         try {
           const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
           audioContextRef.current = new AudioContextClass();
-          console.log("✅ تم إنشاء AudioContext لتشغيل الصوت المدفق");
+          console.log("✅ Created AudioContext for streaming audio playback");
         } catch (err) {
-          console.error("❌ فشل في إنشاء AudioContext:", err);
-          throw new Error("لا يمكن إنشاء سياق صوتي. الرجاء التأكد من أن المتصفح يدعم Web Audio API.");
+          console.error("❌ Failed to create AudioContext:", err);
+          throw new Error("Cannot create audio context. Please check your browser supports Web Audio API.");
         }
       }
 
-      // إذا كان AudioContext متوقفًا، قم بتشغيله
+      // If AudioContext is suspended, resume it
       if (audioContextRef.current.state === "suspended") {
         await audioContextRef.current.resume();
-        console.log("✅ تم استئناف عمل AudioContext");
+        console.log("✅ Resumed AudioContext");
       }
 
-      console.log("🔊 بدء تدفق النص إلى صوت:", text.substring(0, 50) + "...");
+      console.log("🔊 Starting text to speech streaming:", text.substring(0, 50) + "...");
       callbacks?.onStart?.();
 
-      // استدعاء وظيفة دفق النص إلى كلام
-      const protocol = window.location.protocol;
-      const hostname = window.location.hostname;
-      const port = hostname === 'localhost' ? ':54321' : '';
-      const functionUrl = `${protocol}//${hostname}${port}/functions/v1/text-to-speech`;
+      // Call the text-to-speech stream function
+      const { data: supabaseData } = await supabase.auth.getSession();
+      const accessToken = supabaseData.session?.access_token;
       
-      // إعداد المصادقة
-      let authHeaders = {};
-      try {
-        const session = await supabase.auth.getSession();
-        if (session?.data?.session?.access_token) {
-          authHeaders = {
-            "Authorization": `Bearer ${session.data.session.access_token}`
-          };
-        }
-      } catch (e) {
-        console.warn("❌ لم نتمكن من الحصول على جلسة المستخدم:", e);
+      // Get the current URL to determine our Supabase project ID
+      const { protocol, host } = window.location;
+      
+      // Determine if localhost or production
+      const baseUrl = host.includes('localhost')
+        ? `${protocol}//${host}`
+        : `${protocol}//${host}`;
+        
+      const endpoint = `${baseUrl}/functions/v1/text-to-speech`;
+      
+      console.log("🔄 Calling text-to-speech endpoint at:", endpoint);
+
+      // Prepare headers with authentication if available
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
       }
 
-      const response = await fetch(functionUrl, {
+      const response = await fetch(endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeaders
-        },
+        headers,
         body: JSON.stringify({ 
           text, 
           stream: true
@@ -196,82 +199,81 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
 
       if (!response.ok || !response.body) {
         const errorText = await response.text();
-        throw new Error(`فشل في دفق النص إلى كلام: ${response.status} ${errorText}`);
+        throw new Error(`Failed to stream text to speech: ${response.status} ${errorText}`);
       }
 
-      console.log("✅ تم بدء استقبال دفق الصوت من الخادم");
+      console.log("✅ Started receiving audio stream from server");
 
-      // إنشاء قارئ الدفق
+      // Create a reader for the stream
       const reader = response.body.getReader();
-      const streamProcessor = new ReadableStream({
-        async start(controller) {
-          try {
-            // معالجة بيانات الدفق
-            while (true) {
-              const { done, value } = await reader.read();
-              
-              if (done) {
-                console.log("✅ انتهى دفق الصوت");
-                controller.close();
-                callbacks?.onEnd?.();
-                break;
-              }
-              
-              // هذه الدالة تعالج كل قطعة من البيانات الصوتية وتشغلها
-              await processAudioChunk(value, audioContextRef.current!);
-              callbacks?.onChunk?.(value);
-              
-              // إرسال البيانات للتحكم في الدفق
-              controller.enqueue(value);
-            }
-          } catch (error) {
-            console.error("❌ خطأ في معالجة دفق الصوت:", error);
-            controller.error(error);
-          } finally {
-            setIsAudioLoading(false);
-          }
-        }
-      });
-
-      // معالجة البيانات الصوتية من الدفق
-      async function processAudioChunk(chunk: Uint8Array, audioContext: AudioContext) {
+      
+      // Process the audio chunks
+      const processingAudio = async () => {
         try {
-          // تحويل البيانات إلى AudioBuffer
-          const audioBuffer = await audioContext.decodeAudioData(chunk.buffer);
-          
-          // إنشاء مصدر صوتي
-          const source = audioContext.createBufferSource();
-          source.buffer = audioBuffer;
-          source.connect(audioContext.destination);
-          
-          // إخطار بأننا بدأنا تدفق الصوت
-          if (callbacks?.onStreamStart) {
-            callbacks.onStreamStart(source);
+          while (true) {
+            const { done, value } = await reader.read();
+            
+            if (done) {
+              console.log("✅ Audio stream complete");
+              break;
+            }
+            
+            // Process the audio chunk and play it
+            if (audioContextRef.current && value) {
+              try {
+                // Decode the audio data
+                const audioBuffer = await audioContextRef.current.decodeAudioData(value.buffer.slice(0));
+                
+                // Create a buffer source
+                const source = audioContextRef.current.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContextRef.current.destination);
+                
+                // Notify that we're starting to stream audio
+                if (callbacks?.onStreamStart) {
+                  callbacks.onStreamStart(source);
+                }
+                
+                // Play the audio
+                source.start(0);
+                
+                // Wait for this chunk to finish playing
+                await new Promise<void>((resolve) => {
+                  source.onended = () => resolve();
+                });
+                
+                // Notify about the chunk
+                if (callbacks?.onChunk) {
+                  callbacks.onChunk(value.buffer);
+                }
+              } catch (decodeError) {
+                console.error("❌ Error decoding audio chunk:", decodeError);
+              }
+            }
           }
           
-          // تشغيل الصوت
-          source.start(0);
-          
-          // الانتظار حتى انتهاء تشغيل هذه القطعة
-          return new Promise<void>((resolve) => {
-            source.onended = () => resolve();
-          });
+          // Audio stream complete
+          callbacks?.onEnd?.();
         } catch (error) {
-          console.error("❌ خطأ في معالجة قطعة الصوت:", error);
+          console.error("❌ Error processing audio stream:", error);
+          callbacks?.onEnd?.();
+        } finally {
+          setIsAudioLoading(false);
         }
-      }
-
-      // بدء معالجة الدفق
-      const stream = new Response(streamProcessor);
-      await stream.arrayBuffer();
+      };
+      
+      // Start processing audio
+      processingAudio();
+      
+      return;
     } catch (error) {
-      console.error("❌ خطأ في تدفق النص إلى كلام:", error);
+      console.error("❌ Error in text-to-speech streaming:", error);
       setIsAudioLoading(false);
       callbacks?.onEnd?.();
       
       toast({
-        title: "خطأ في تحويل النص إلى صوت",
-        description: error instanceof Error ? error.message : "حدث خطأ أثناء تحويل النص إلى صوت",
+        title: "Error Converting Text to Speech",
+        description: error instanceof Error ? error.message : "An error occurred while converting text to speech",
         variant: "destructive",
       });
     }
@@ -287,7 +289,7 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
         abortControllerRef.current = new AbortController();
       }
       
-      console.log("🔊 تحويل النص إلى كلام:", text.substring(0, 50) + "...");
+      console.log("🔊 Converting text to speech:", text.substring(0, 50) + "...");
       
       // Call the text-to-speech Edge Function
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
@@ -295,36 +297,36 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       });
       
       if (error || !data) {
-        console.error("خطأ في تحويل النص إلى كلام:", error || "لا توجد بيانات");
-        throw new Error(error?.message || "فشل في تحويل النص إلى كلام");
+        console.error("Error in text-to-speech:", error || "No data returned");
+        throw new Error(error?.message || "Failed to convert text to speech");
       }
       
       if (!data.audio) {
-        console.error("لم يتم إرجاع أي بيانات صوتية");
-        throw new Error("لم يتم إرجاع أي بيانات صوتية");
+        console.error("No audio data returned");
+        throw new Error("No audio data returned");
       }
       
-      console.log("✅ تم استلام بيانات صوتية بنجاح. طول البيانات:", data.audio.length);
+      console.log("✅ Successfully received audio data. Data length:", data.audio.length);
       
       // Create audio URL from base64
       const audioUrl = `data:audio/mp3;base64,${data.audio}`;
-      console.log("✅ تم تحويل النص إلى كلام بنجاح وإنشاء رابط الصوت");
+      console.log("✅ Successfully converted text to speech and created audio URL");
       
-      // تحقق من صحة البيانات الصوتية قبل إرجاعها
+      // Validate audio data before returning
       if (!isValidBase64(data.audio)) {
-        console.error("❌ بيانات الصوت المستلمة ليست بتنسيق base64 صالح");
-        throw new Error("بيانات الصوت غير صالحة");
+        console.error("❌ Received audio data is not valid base64 format");
+        throw new Error("Invalid audio data");
       }
       
-      // اختبار تحميل الصوت مسبقًا
+      // Test preloading the audio
       try {
         const preloadAudio = new Audio();
         preloadAudio.src = audioUrl;
         
-        // وضع مستمع مؤقت للتأكد من أن الصوت قابل للتشغيل
+        // Set a temporary listener to make sure the audio can play
         await new Promise<void>((resolve, reject) => {
           const timeout = setTimeout(() => {
-            reject(new Error("انتهت مهلة تحميل الصوت"));
+            reject(new Error("Audio loading timeout"));
           }, 3000);
           
           preloadAudio.oncanplaythrough = () => {
@@ -334,18 +336,18 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
           
           preloadAudio.onerror = (e) => {
             clearTimeout(timeout);
-            reject(new Error(`فشل تحميل الصوت: ${e}`));
+            reject(new Error(`Audio loading failed: ${e}`));
           };
           
-          // التحميل المسبق
+          // Preload
           preloadAudio.load();
         });
         
-        // تم التحميل بنجاح
-        console.log("✅ تم التحقق من صلاحية ملف الصوت للتشغيل");
+        // Successfully loaded
+        console.log("✅ Validated audio file is playable");
       } catch (preloadError) {
-        console.error("❌ فشل اختبار تحميل الصوت:", preloadError);
-        // نستمر على الرغم من الخطأ، لكن نسجله
+        console.error("❌ Audio preload test failed:", preloadError);
+        // Continue despite the error, but log it
       }
       
       // Callback for start of synthesis
@@ -353,10 +355,10 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       
       return audioUrl;
     } catch (error) {
-      console.error("خطأ في تحويل النص إلى كلام:", error);
+      console.error("Error in text-to-speech:", error);
       toast({
-        title: "خطأ في تحويل النص إلى صوت",
-        description: "لم نتمكن من تحويل الرد إلى صوت. يرجى المحاولة مرة أخرى.",
+        title: "Error Converting Text to Speech",
+        description: "Could not convert the response to speech. Please try again.",
         variant: "destructive",
       });
       return null;
@@ -367,16 +369,16 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
     }
   }, [toast]);
   
-  // التحقق من صحة البيانات بتنسيق base64
+  // Validate base64 data
   const isValidBase64 = (str: string): boolean => {
     try {
-      // التحقق من أن السلسلة ليست فارغة
+      // Check if string is empty
       if (!str || str.trim() === '') return false;
       
-      // التحقق من أن الطول مناسب لـ base64 (يجب أن يكون مضاعف 4)
+      // Check if length is appropriate for base64 (must be multiple of 4)
       if (str.length % 4 !== 0) return false;
       
-      // التحقق من أن السلسلة تحتوي على أحرف base64 فقط
+      // Check if string contains only base64 characters
       return /^[A-Za-z0-9+/=]+$/.test(str);
     } catch (e) {
       return false;
