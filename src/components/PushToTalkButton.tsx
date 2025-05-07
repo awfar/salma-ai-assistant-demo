@@ -36,17 +36,15 @@ const PushToTalkButton: React.FC<PushToTalkButtonProps> = ({
     setIsPressing(true);
     setShowRings(true);
     
-    // Start recording after a short delay to avoid accidental taps
-    longPressTimeoutRef.current = setTimeout(() => {
-      console.log("🎤 زر التحدث: بدء التسجيل");
-      onStartRecording();
-      
-      // Set a maximum recording time (7 seconds)
-      maxRecordingTimeRef.current = setTimeout(() => {
-        console.log("⏱️ زر التحدث: تم الوصول للحد الأقصى لوقت التسجيل");
-        handleStop();
-      }, 7000);
-    }, 200);
+    // Start recording immediately to improve responsiveness
+    console.log("🎤 زر التحدث: بدء التسجيل");
+    onStartRecording();
+    
+    // Set a maximum recording time (7 seconds)
+    maxRecordingTimeRef.current = setTimeout(() => {
+      console.log("⏱️ زر التحدث: تم الوصول للحد الأقصى لوقت التسجيل");
+      handleStop();
+    }, 7000);
   };
 
   // Stop recording on pointer up

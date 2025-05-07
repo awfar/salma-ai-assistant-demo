@@ -141,50 +141,21 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
 
     try {
       setIsAudioLoading(true);
-      
-      // Ensure we have an audio context
-      if (!audioContextRef.current) {
-        try {
-          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-          audioContextRef.current = new AudioContextClass();
-          console.log("✅ Created AudioContext for streaming audio playback");
-        } catch (err) {
-          console.error("❌ Failed to create AudioContext:", err);
-          throw new Error("Cannot create audio context. Please check your browser supports Web Audio API.");
-        }
-      }
-
-      // If AudioContext is suspended, resume it
-      if (audioContextRef.current.state === "suspended") {
-        await audioContextRef.current.resume();
-        console.log("✅ Resumed AudioContext");
-      }
-
-      console.log("🔊 Starting text to speech streaming:", text.substring(0, 50) + "...");
       callbacks?.onStart?.();
-
-      // Directly call the Edge Function with fetch to ensure we get the proper stream response
-      const { origin, pathname } = window.location;
-      const endpoint = origin + '/functions/v1/text-to-speech';
       
-      console.log("🔄 Calling text-to-speech endpoint at:", endpoint);
-
       // Get the authentication session
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData?.session?.access_token;
-
-      // Prepare headers with authentication if available
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
       
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-      }
+      console.log("🔊 Starting text to speech streaming:", text.substring(0, 50) + "...");
 
-      const response = await fetch(endpoint, {
+      // Call the Edge Function with proper content type
+      const response = await fetch(`${window.location.origin}/functions/v1/text-to-speech`, {
         method: "POST",
-        headers,
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { "Authorization": `Bearer ${accessToken}` } : {})
+        },
         body: JSON.stringify({ 
           text, 
           stream: true
@@ -192,78 +163,73 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       });
 
       if (!response.ok || !response.body) {
-        const errorText = await response.text();
-        throw new Error(`Failed to stream text to speech: ${response.status} ${errorText}`);
+        throw new Error(`Failed to stream text to speech: ${response.status}`);
       }
 
       console.log("✅ Started receiving audio stream from server");
+
+      // Ensure we have an audio context
+      if (!audioContextRef.current) {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        audioContextRef.current = new AudioContextClass();
+      }
+
+      // If AudioContext is suspended, resume it
+      if (audioContextRef.current.state === "suspended") {
+        await audioContextRef.current.resume();
+      }
 
       // Create a reader for the stream
       const reader = response.body.getReader();
       
       // Process the audio chunks
-      const processingAudio = async () => {
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            
-            if (done) {
-              console.log("✅ Audio stream complete");
-              break;
-            }
-            
-            // Process the audio chunk and play it
-            if (audioContextRef.current && value) {
-              try {
-                // Decode the audio data
-                const audioBuffer = await audioContextRef.current.decodeAudioData(value.buffer.slice(0));
-                
-                // Create a buffer source
-                const source = audioContextRef.current.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(audioContextRef.current.destination);
-                
-                // Notify that we're starting to stream audio
-                if (callbacks?.onStreamStart) {
-                  callbacks.onStreamStart(source);
-                }
-                
-                // Play the audio
-                source.start(0);
-                
-                // Wait for this chunk to finish playing
-                await new Promise<void>((resolve) => {
-                  source.onended = () => resolve();
-                });
-                
-                // Notify about the chunk
-                if (callbacks?.onChunk) {
-                  callbacks.onChunk(value.buffer);
-                }
-              } catch (decodeError) {
-                console.error("❌ Error decoding audio chunk:", decodeError);
-              }
-            }
-          }
-          
-          // Audio stream complete
-          callbacks?.onEnd?.();
-        } catch (error) {
-          console.error("❌ Error processing audio stream:", error);
-          callbacks?.onEnd?.();
-        } finally {
-          setIsAudioLoading(false);
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          console.log("✅ Audio stream complete");
+          break;
         }
-      };
+        
+        if (audioContextRef.current && value) {
+          try {
+            // Decode the audio data
+            const audioBuffer = await audioContextRef.current.decodeAudioData(value.buffer.slice(0));
+            
+            // Create a buffer source
+            const source = audioContextRef.current.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(audioContextRef.current.destination);
+            
+            // Notify that we're starting to stream audio
+            if (callbacks?.onStreamStart) {
+              callbacks.onStreamStart(source);
+            }
+            
+            // Play the audio
+            source.start(0);
+            
+            // Wait for this chunk to finish playing
+            await new Promise<void>((resolve) => {
+              source.onended = () => resolve();
+            });
+            
+            // Notify about the chunk
+            if (callbacks?.onChunk) {
+              callbacks.onChunk(value.buffer);
+            }
+          } catch (decodeError) {
+            console.error("❌ Error decoding audio chunk:", decodeError);
+          }
+        }
+      }
       
-      // Start processing audio
-      processingAudio();
-      
+      // Audio stream complete
+      callbacks?.onEnd?.();
       return;
+      
     } catch (error) {
       console.error("❌ Error in text-to-speech streaming:", error);
-      setIsAudioLoading(false);
-      callbacks?.onEnd?.();
       
       // Try falling back to non-streaming mode
       console.log("🔄 Attempting fallback to non-streaming TTS...");
@@ -280,6 +246,8 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
           variant: "destructive",
         });
       }
+    } finally {
+      setIsAudioLoading(false);
     }
   }, [toast]);
   
@@ -287,6 +255,7 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
   const textToSpeech = useCallback(async (text: string, callbacks?: TextToSpeechCallbacks): Promise<string | null> => {
     try {
       setIsAudioLoading(true);
+      callbacks?.onStart?.();
       
       // Create a new abort controller
       if (!abortControllerRef.current) {
@@ -315,12 +284,6 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       // Create audio URL from base64
       const audioUrl = `data:audio/mp3;base64,${data.audio}`;
       console.log("✅ Successfully converted text to speech and created audio URL");
-      
-      // Validate audio data before returning
-      if (!isValidBase64(data.audio)) {
-        console.error("❌ Received audio data is not valid base64 format");
-        throw new Error("Invalid audio data");
-      }
       
       // Test preloading the audio
       try {
@@ -351,11 +314,7 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
         console.log("✅ Validated audio file is playable");
       } catch (preloadError) {
         console.error("❌ Audio preload test failed:", preloadError);
-        // Continue despite the error, but log it
       }
-      
-      // Callback for start of synthesis
-      callbacks?.onStart && callbacks.onStart();
       
       return audioUrl;
     } catch (error) {
@@ -369,25 +328,8 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
     } finally {
       setIsAudioLoading(false);
       // The onEnd callback will be handled when the audio actually plays and ends
-      // Not here, as we're just returning the URL
     }
   }, [toast]);
-  
-  // Validate base64 data
-  const isValidBase64 = (str: string): boolean => {
-    try {
-      // Check if string is empty
-      if (!str || str.trim() === '') return false;
-      
-      // Check if length is appropriate for base64 (must be multiple of 4)
-      if (str.length % 4 !== 0) return false;
-      
-      // Check if string contains only base64 characters
-      return /^[A-Za-z0-9+/=]+$/.test(str);
-    } catch (e) {
-      return false;
-    }
-  };
   
   return { askAssistant, textToSpeech, streamToSpeech, isLoading, isAudioLoading, cancelRequest };
 };

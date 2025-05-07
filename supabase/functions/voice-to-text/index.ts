@@ -9,7 +9,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// معالجة قاعدة64 بشكل متقطع لمنع مشاكل الذاكرة
+// Process base64 in chunks to prevent memory issues
 function processBase64Chunks(base64String: string, chunkSize = 32768) {
   const chunks: Uint8Array[] = [];
   let position = 0;
@@ -53,37 +53,37 @@ serve(async (req) => {
 
     console.log("استلام بيانات صوتية للتحويل إلى نص، حجم البيانات:", audio.length);
 
-    // التحقق من وجود مفتاح الـ API
+    // Verify API key is available
     if (!OPENAI_API_KEY) {
       throw new Error('مفتاح API غير متوفر (OPENAI_API_KEY)')
     }
 
-    // معالجة الصوت بشكل متقطع
+    // Process audio in chunks
     const binaryAudio = processBase64Chunks(audio)
     
-    // تحقق إضافي من حجم البيانات
+    // Additional verification of audio data
     if (binaryAudio.length < 500) {
       console.error("بيانات الصوت صغيرة جداً:", binaryAudio.length, "بايت");
       throw new Error("بيانات الصوت غير كافية للتحويل");
     }
     
-    // إعداد FormData
+    // Setup FormData
     const formData = new FormData()
     
-    // استخدام mp3 لضمان التوافق مع OpenAI
+    // Use mp3 for compatibility with OpenAI
     const blob = new Blob([binaryAudio], { type: 'audio/mp3' })
     formData.append('file', blob, 'audio.mp3')
     formData.append('model', 'whisper-1')
-    formData.append('language', language) // تحديد اللغة العربية صراحة
+    formData.append('language', language) // Explicitly set Arabic language
     formData.append('response_format', 'json')
-    formData.append('temperature', '0.0') // قيمة منخفضة للحصول على دقة أعلى
-    formData.append('prompt', 'هذا تسجيل صوتي باللغة العربية يحتوي على أسئلة واستفسارات متعلقة ببرنامج تكافل وكرامة ووزارة التضامن الاجتماعي المصرية') // توجيه السياق للمساعدة في الدقة
+    formData.append('temperature', '0.0') // Lower value for higher accuracy
+    formData.append('prompt', 'هذا تسجيل صوتي باللغة العربية يحتوي على أسئلة واستفسارات متعلقة ببرنامج تكافل وكرامة ووزارة التضامن الاجتماعي المصرية') // Context prompt to help accuracy
 
     console.log("إرسال الطلب إلى OpenAI Whisper API...");
     console.log("مع اللغة المحددة:", language);
     console.log("حجم الملف:", blob.size, "بايت");
 
-    // إرسال إلى OpenAI
+    // Send to OpenAI
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {

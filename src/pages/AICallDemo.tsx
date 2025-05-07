@@ -16,33 +16,30 @@ const AICallDemo = () => {
   const { toast } = useToast();
   const micInitialized = useRef(false);
   const audioContextInitialized = useRef(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
   
-  // Check for microphone permission and initialize audio on load
+  // Initialize audio system on load
   useEffect(() => {
     const initializeAudio = async () => {
       try {
         console.log("🎤 Initializing audio and microphone...");
         
-        if (micInitialized.current && audioContextInitialized.current) {
-          return;
-        }
-        
         // Initialize AudioContext first to wake up audio system
         if (!audioContextInitialized.current) {
           try {
             const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-            const audioContext = new AudioContext();
+            audioContextRef.current = new AudioContext();
             
-            // Create a short silent buffer and play it to unblock audio
-            const silentBuffer = audioContext.createBuffer(1, 1, 22050);
-            const source = audioContext.createBufferSource();
+            // Create and play a short silent buffer to unblock audio
+            const silentBuffer = audioContextRef.current.createBuffer(1, 1, 22050);
+            const source = audioContextRef.current.createBufferSource();
             source.buffer = silentBuffer;
-            source.connect(audioContext.destination);
+            source.connect(audioContextRef.current.destination);
             source.start();
             
             // Resume the audio context if it's suspended
-            if (audioContext.state === 'suspended') {
-              await audioContext.resume();
+            if (audioContextRef.current.state === 'suspended') {
+              await audioContextRef.current.resume();
             }
             
             audioContextInitialized.current = true;
@@ -52,33 +49,47 @@ const AICallDemo = () => {
           }
         }
         
-        // Request microphone permission with optimal settings for Arabic speech
+        // Request and verify microphone permission
         if (!micInitialized.current) {
-          const stream = await navigator.mediaDevices.getUserMedia({ 
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-              sampleRate: 48000
-            } 
-          });
-          
-          console.log("✅ Microphone permission granted successfully");
-          setMicPermissionGranted(true);
-          micInitialized.current = true;
-          
-          // Release the microphone immediately after checking permission
-          // Individual recordings will request it again as needed
-          stream.getTracks().forEach(track => track.stop());
+          try {
+            const constraints = { 
+              audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                sampleRate: 48000
+              } 
+            };
+            
+            console.log("🎤 Requesting microphone with constraints:", constraints);
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            
+            console.log("✅ Microphone permission granted successfully");
+            setMicPermissionGranted(true);
+            micInitialized.current = true;
+            
+            // Verify we got audio tracks
+            if (stream.getAudioTracks().length === 0) {
+              console.warn("⚠️ No audio tracks in stream");
+            } else {
+              console.log("🎤 Audio tracks:", stream.getAudioTracks().length);
+              console.log("🎤 Audio track settings:", stream.getAudioTracks()[0].getSettings());
+            }
+            
+            // Release the microphone immediately after checking permission
+            stream.getTracks().forEach(track => track.stop());
+          } catch (err) {
+            console.error("❌ Error accessing microphone:", err);
+            toast({
+              title: "Warning",
+              description: "Could not access microphone. Please allow access to continue.",
+              variant: "destructive",
+              duration: 5000,
+            });
+          }
         }
       } catch (err) {
-        console.error("❌ Error checking input devices:", err);
-        toast({
-          title: "Warning",
-          description: "Could not access microphone. Please allow access to continue.",
-          variant: "destructive",
-          duration: 5000,
-        });
+        console.error("❌ Error initializing audio:", err);
       }
     };
     
@@ -90,21 +101,30 @@ const AICallDemo = () => {
       initializeAudio();
     };
     
-    window.addEventListener('touchstart', initOnUserInteraction, { once: true });
-    window.addEventListener('click', initOnUserInteraction, { once: true });
+    window.addEventListener('touchstart', initOnUserInteraction);
+    window.addEventListener('click', initOnUserInteraction);
+    window.addEventListener('keydown', initOnUserInteraction);
     
     return () => {
       window.removeEventListener('touchstart', initOnUserInteraction);
       window.removeEventListener('click', initOnUserInteraction);
+      window.removeEventListener('keydown', initOnUserInteraction);
+      
+      // Clean up AudioContext when component unmounts
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(err => {
+          console.error("❌ Error closing AudioContext:", err);
+        });
+      }
     };
   }, [toast]);
   
-  // Handle starting call with push-to-talk mode
+  // Handle starting call
   const handleStartCallClick = async () => {
     try {
-      console.log("🎤 Requesting microphone permission and initializing call...");
+      console.log("🎤 Starting call and initializing audio...");
       
-      // Request microphone permission for push-to-talk
+      // Request microphone permission
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
@@ -114,7 +134,6 @@ const AICallDemo = () => {
       });
       
       // Release the microphone immediately after confirming permission
-      // Individual recordings will request it again as needed
       stream.getTracks().forEach(track => track.stop());
       
       // Start call

@@ -3,9 +3,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const ELEVEN_LABS_API_KEY = Deno.env.get("ELEVEN_LABS_API_KEY");
 
-// Voice IDs from Eleven Labs that we can use
-// We use the voice ID associated with the agent
-const VOICE_ID = "xBxkQvOKMczEIbvEjnFZ"; 
+// Use a verified working voice ID from ElevenLabs
+// Arabic female voice - Mimi (multilingual)
+const VOICE_ID = "pFZP5JQG7iQjIQuC4Bku"; 
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
