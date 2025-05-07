@@ -56,12 +56,12 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   
   // The suggested questions
   const [suggestedQuestions] = useState<string[]>([
-    "ما هو موعد صرف المعاش؟",
-    "ما هي شروط تكافل وكرامة؟",
-    "كيف أُحدث بياناتي؟",
-    "ما هي المستندات المطلوبة للتقديم؟",
-    "كيف يمكنني الاستعلام عن معاشي؟",
-    "أين أقرب فرع لوزارة التضامن؟"
+    "إيه هو برنامج تكافل وكرامة؟",
+    "إزاي أقدم في البرنامج؟",
+    "إيه هي المستندات المطلوبة؟",
+    "أنا أرملة.. هل ممكن أستفيد من البرنامج؟",
+    "مواعيد صرف الدعم إمتى؟",
+    "عندي سؤال عن برنامج كرامة",
   ]);
 
   // Speech recognition handling
@@ -150,7 +150,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         }, 1500); // Stop after 1.5 seconds of silence
       }
     }
-  }, [isListening]);
+  }, []);
   
   // Speech recognition hook with silence detection
   const { 
@@ -438,7 +438,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         return;
       }
       
-      const welcomeMessage = "مرحباً، أنا سلمى من وزارة التضامن الاجتماعي. كيف يمكنني مساعدتك اليوم؟";
+      const welcomeMessage = "أهلا بيك في مؤسسه تكافل و كرامه معاك خالد موظف الذكاء الاصطناعي أنا هنا عشان اجاوبك علي كل الاستفسارات ازاي اقدر اساعدك؟";
       addMessage(welcomeMessage, "assistant");
       
       // Convert text to speech

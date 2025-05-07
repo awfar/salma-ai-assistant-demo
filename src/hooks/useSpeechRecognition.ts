@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { setupAudioLevelAnalysis } from '@/utils/audioUtils';
@@ -102,7 +103,7 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
         if (onError) onError('حدث خطأ أثناء معالجة الصوت');
       }
     } else {
-      console.log("��️ الملف الصوتي صغير جدًا، يبدو أنه لم يتم التقاط أي صوت");
+      console.log("⚠️ الملف الصوتي صغير جدًا، يبدو أنه لم يتم التقاط أي صوت");
       toast({
         title: "لم نتمكن من سماعك",
         description: "الرجاء المحاولة مرة أخرى والتحدث بوضوح",
@@ -179,7 +180,7 @@ export const useSpeechRecognition = (options?: SpeechRecognitionOptions) => {
       console.log("🎤 بدء الاستماع...");
       
       // Initialize microphone if not already initialized
-      const stream = await initializeMicrophone();
+      await initializeMicrophone();
       
       // Start analyzing audio levels
       const { analyzeAudio } = audioAnalysisRef.current;
