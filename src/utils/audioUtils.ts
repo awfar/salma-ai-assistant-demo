@@ -1,4 +1,3 @@
-
 // Utility functions for audio testing and initialization
 
 /**
@@ -7,11 +6,11 @@
  * @returns Promise that resolves to true if test was successful, false otherwise
  */
 export const testAudioOutput = async (force: boolean = false): Promise<boolean> => {
-  // Track if test has been run
-  static let testRun = false;
+  // Track if test has been run - using module-level variable instead of static
+  let testRunCompleted = false;
   
   // Don't run the test more than once unless forced
-  if (testRun && !force) {
+  if (testRunCompleted && !force) {
     console.log("Audio test already run, skipping");
     return true;
   }
@@ -55,7 +54,7 @@ export const testAudioOutput = async (force: boolean = false): Promise<boolean> 
     oscillator.stop(audioContext.currentTime + 0.5); // 0.5 second duration
     
     console.log("Audio test beep played");
-    testRun = true;
+    testRunCompleted = true;
     
     // Cleanup
     setTimeout(() => {
@@ -144,4 +143,23 @@ export const playVerificationSound = async (silent: boolean = false): Promise<bo
     console.error("Failed to play verification sound:", err);
     return false;
   }
+};
+
+/**
+ * Convert a Blob to Base64
+ * @param blob The blob to convert
+ * @returns Promise that resolves to the base64 string
+ */
+export const blobToBase64 = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      // Extract just the base64 data (remove the data URL prefix)
+      const base64Data = base64String.split(',')[1];
+      resolve(base64Data);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 };
