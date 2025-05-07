@@ -26,14 +26,12 @@ const PushToTalkButton: React.FC<PushToTalkButtonProps> = ({
   const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const maxRecordingTimeRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Start recording on mouse/touch down
-  const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
+  // Start recording on pointer down (handles both mouse and touch)
+  const handleStart = (e: React.PointerEvent) => {
     if (disabled) return;
     
     // Prevent default behavior for touch events to avoid scrolling
-    if (e.type === 'touchstart') {
-      e.preventDefault();
-    }
+    e.preventDefault();
     
     setIsPressing(true);
     setShowRings(true);
@@ -51,7 +49,7 @@ const PushToTalkButton: React.FC<PushToTalkButtonProps> = ({
     }, 200);
   };
 
-  // Stop recording on mouse/touch up
+  // Stop recording on pointer up
   const handleStop = () => {
     if (disabled) return;
     
@@ -117,14 +115,14 @@ const PushToTalkButton: React.FC<PushToTalkButtonProps> = ({
           "relative flex items-center justify-center rounded-full p-5 text-white transition-all transform",
           isPressing ? "bg-ministry-green scale-95" : "bg-gray-800 hover:bg-gray-700",
           disabled ? "opacity-50 cursor-not-allowed" : "hover:scale-105 active:scale-95",
+          // Add user-select: none and touch-action: manipulation
+          "select-none touch-action-manipulation -webkit-user-select-none -webkit-touch-callout-none",
           className
         )}
-        onMouseDown={handleStart}
-        onMouseUp={handleStop}
-        onMouseLeave={handleStop}
-        onTouchStart={handleStart}
-        onTouchEnd={handleStop}
-        onTouchCancel={handleStop}
+        onPointerDown={handleStart}
+        onPointerUp={handleStop}
+        onPointerLeave={handleStop}
+        onPointerCancel={handleStop}
         disabled={disabled}
         aria-label="اضغط للتحدث"
       >

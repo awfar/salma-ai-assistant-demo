@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { PhoneOff, Volume2, Volume } from "lucide-react";
 import CallTimer from "@/components/CallTimer";
@@ -47,7 +46,8 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   // The AI assistant hook
   const { 
     askAssistant, 
-    textToSpeech, 
+    textToSpeech,
+    cancelRequest,
     isLoading: isAIThinking,
     isAudioLoading 
   } = useAIAssistant();
@@ -163,8 +163,9 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     try {
       if (processingUserInputRef.current) return;
       
-      // Stop any playing audio
+      // Stop any playing audio and cancel any pending requests
       stopCurrentAudio();
+      cancelRequest?.();
       
       // Start recording
       if (!recorderRef.current) {
@@ -196,7 +197,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         variant: "destructive",
       });
     }
-  }, [stopCurrentAudio, audioLevel]);
+  }, [stopCurrentAudio, audioLevel, cancelRequest]);
   
   // Handle end of recording
   const handleStopRecording = useCallback(async (noSpeechDetected = false) => {
@@ -322,12 +323,13 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       }
       
       stopCurrentAudio();
+      cancelRequest?.();
       
       if (noSpeechTimeoutRef.current) {
         clearTimeout(noSpeechTimeoutRef.current);
       }
     };
-  }, [stopCurrentAudio]);
+  }, [stopCurrentAudio, cancelRequest]);
 
   // Play welcome message on first render - ONLY ONCE
   useEffect(() => {

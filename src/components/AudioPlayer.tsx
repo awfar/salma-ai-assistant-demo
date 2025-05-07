@@ -52,25 +52,32 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       }
     }));
     
-    // Handle audio source changes
+    // Handle audio source changes - prevent automatic replaying
     useEffect(() => {
       if (!audioSource) return;
       
       const setupAudio = async () => {
         if (audioRef.current) {
-          audioRef.current.src = audioSource;
-          audioRef.current.load();
+          // Store the previous source to detect changes
+          const previousSource = audioRef.current.src;
+          const isNewSource = previousSource !== audioSource;
           
-          if (autoPlay && !isMuted) {
-            try {
-              console.log("▶️ Auto-playing audio");
-              await audioRef.current.play();
-              isPlayingRef.current = true;
-              if (onPlay) onPlay();
-            } catch (error) {
-              console.error("❌ Auto-play failed:", error);
-              isPlayingRef.current = false;
-              if (onError) onError(error instanceof Error ? error : new Error('Failed to auto-play audio'));
+          // Only set new source if it's different
+          if (isNewSource) {
+            audioRef.current.src = audioSource;
+            audioRef.current.load();
+            
+            if (autoPlay && !isMuted) {
+              try {
+                console.log("▶️ Auto-playing audio");
+                await audioRef.current.play();
+                isPlayingRef.current = true;
+                if (onPlay) onPlay();
+              } catch (error) {
+                console.error("❌ Auto-play failed:", error);
+                isPlayingRef.current = false;
+                if (onError) onError(error instanceof Error ? error : new Error('Failed to auto-play audio'));
+              }
             }
           }
         }
