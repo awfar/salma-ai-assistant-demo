@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -6,7 +7,7 @@ import CallHeader from "@/components/CallHeader";
 import CallStartScreen from "@/components/CallStartScreen";
 import ActiveCallScreen from "@/components/ActiveCallScreen";
 import CallFooter from "@/components/CallFooter";
-import { testAudioOutput } from "@/utils/audioUtils";
+import { testAudioOutput, playVerificationSound } from "@/utils/audioUtils";
 
 const AICallDemo = () => {
   const navigate = useNavigate();
@@ -27,6 +28,7 @@ const AICallDemo = () => {
         // Initialize AudioContext first to wake up audio system
         if (!audioContextInitialized.current) {
           try {
+            console.log("🔊 Creating and initializing AudioContext...");
             const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
             audioContextRef.current = new AudioContext();
             
@@ -39,11 +41,18 @@ const AICallDemo = () => {
             
             // Resume the audio context if it's suspended
             if (audioContextRef.current.state === 'suspended') {
+              console.log("🔊 Resuming suspended AudioContext...");
               await audioContextRef.current.resume();
             }
             
             audioContextInitialized.current = true;
             console.log("✅ Audio system successfully initialized");
+            
+            // Play a verification sound to ensure audio is working
+            setTimeout(async () => {
+              const soundPlayed = await playVerificationSound();
+              console.log(soundPlayed ? "✅ Audio system verified with sound" : "❌ Audio verification failed");
+            }, 1000);
             
             // Test audio output
             const audioOutputWorks = await testAudioOutput();
@@ -108,9 +117,9 @@ const AICallDemo = () => {
       initializeAudio();
     };
     
-    window.addEventListener('touchstart', initOnUserInteraction);
-    window.addEventListener('click', initOnUserInteraction);
-    window.addEventListener('keydown', initOnUserInteraction);
+    window.addEventListener('touchstart', initOnUserInteraction, { once: true });
+    window.addEventListener('click', initOnUserInteraction, { once: true });
+    window.addEventListener('keydown', initOnUserInteraction, { once: true });
     
     return () => {
       window.removeEventListener('touchstart', initOnUserInteraction);
@@ -130,6 +139,9 @@ const AICallDemo = () => {
   const handleStartCallClick = async () => {
     try {
       console.log("🎤 Starting call and initializing audio...");
+      
+      // Play a sound to verify audio is working when call starts
+      await playVerificationSound();
       
       // Play a silent audio to unlock audio on iOS/Safari
       const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
@@ -214,6 +226,16 @@ const AICallDemo = () => {
 
       {/* Footer */}
       <CallFooter />
+      
+      {/* Audio debugging message */}
+      {process.env.NODE_ENV !== 'production' && (
+        <div className="fixed bottom-16 left-0 right-0 flex justify-center pointer-events-none">
+          <div className="bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-70">
+            AudioContext: {audioContextInitialized.current ? "Initialized" : "Not initialized"} | 
+            Mic: {micPermissionGranted ? "Granted" : "Not granted"}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

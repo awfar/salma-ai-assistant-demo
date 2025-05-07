@@ -174,13 +174,13 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       console.log("🌐 Using origin for TTS endpoint:", origin);
       
       // Full URL to text-to-speech edge function
-      const ttsEndpoint = `${origin}/functions/v1/text-to-speech`;
-      console.log("🔊 TTS endpoint URL:", ttsEndpoint);
+      const functionPath = '/functions/v1/text-to-speech';
+      console.log("🔊 TTS function path:", functionPath);
       
       console.log("🔊 Starting text to speech streaming:", text.substring(0, 50) + "...");
 
-      // Call the Edge Function with proper content type
-      const response = await fetch(ttsEndpoint, {
+      // Use direct fetch to supabase function instead of invoke
+      const response = await fetch(`${origin}${functionPath}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -188,7 +188,8 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
         body: JSON.stringify({ 
           text, 
           stream: true,
-          voice: "EXAVITQu4vr4xnSDxMaL" // Sarah voice - reliable for testing
+          // Try different voice IDs if one doesn't work
+          voice: "pNInz6obpgDQGcFmaJgB" // Adam voice - alternate option
         })
       });
 
@@ -271,7 +272,6 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       // Try falling back to non-streaming mode
       console.log("🔄 Attempting fallback to non-streaming TTS...");
       try {
-        callbacks?.onStart?.();
         const audioUrl = await textToSpeech(text);
         if (!audioUrl) {
           throw new Error("Failed to get audio URL in fallback mode");
@@ -284,6 +284,8 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
           description: "Could not convert text to speech. Please check your connection and try again.",
           variant: "destructive",
         });
+      } finally {
+        callbacks?.onEnd?.();
       }
     } finally {
       setIsAudioLoading(false);
@@ -308,11 +310,11 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       console.log("🌐 Using origin for TTS endpoint:", origin);
       
       // Full URL to text-to-speech edge function
-      const ttsEndpoint = `${origin}/functions/v1/text-to-speech`;
-      console.log("🔊 TTS endpoint URL:", ttsEndpoint);
+      const functionPath = '/functions/v1/text-to-speech';
+      console.log("🔊 TTS function path:", functionPath);
       
       // Direct fetch to edge function without supabase client
-      const response = await fetch(ttsEndpoint, {
+      const response = await fetch(`${origin}${functionPath}`, {
         method: "POST",
         headers: {
           'Content-Type': 'application/json',
@@ -320,7 +322,7 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
         body: JSON.stringify({ 
           text, 
           stream: false,
-          voice: "EXAVITQu4vr4xnSDxMaL" // Sarah voice - reliable for testing
+          voice: "pNInz6obpgDQGcFmaJgB" // Adam voice - alternate option
         })
       });
       

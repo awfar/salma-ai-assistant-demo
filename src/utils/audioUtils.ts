@@ -108,8 +108,15 @@ export const setupAudioLevelAnalysis = () => {
 // Test audio output
 export const testAudioOutput = async (): Promise<boolean> => {
   try {
+    console.log("🔊 Testing audio output capability...");
     // Create a short beep sound to test audio output
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    
+    // Ensure audio context is running
+    if (audioContext.state === "suspended") {
+      await audioContext.resume();
+    }
+    
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
     
@@ -122,17 +129,58 @@ export const testAudioOutput = async (): Promise<boolean> => {
     
     // Start and stop a short beep
     oscillator.start();
+    console.log("🔊 Audio test tone started...");
     
-    // Stop after 100ms
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Stop after 300ms
+    await new Promise(resolve => setTimeout(resolve, 300));
     oscillator.stop();
     
     // Clean up
     await audioContext.close();
     
+    console.log("✅ Audio output test completed successfully");
     return true;
   } catch (error) {
-    console.error("Error testing audio output:", error);
+    console.error("❌ Error testing audio output:", error);
+    return false;
+  }
+};
+
+// Play a sound to verify audio is working
+export const playVerificationSound = async (): Promise<boolean> => {
+  try {
+    console.log("🔊 Playing verification sound...");
+    
+    // Create an Audio element
+    const audio = new Audio();
+    
+    // Create a simple beep tone
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    const dest = audioContext.createMediaStreamDestination();
+    
+    // Configure the oscillator
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime); // C5
+    gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+    
+    // Connect nodes
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    gainNode.connect(dest);
+    
+    // Start & stop
+    oscillator.start();
+    await new Promise(resolve => setTimeout(resolve, 500));
+    oscillator.stop();
+    await audioContext.close();
+    
+    console.log("✅ Verification sound played successfully");
+    return true;
+  } catch (error) {
+    console.error("❌ Error playing verification sound:", error);
     return false;
   }
 };
