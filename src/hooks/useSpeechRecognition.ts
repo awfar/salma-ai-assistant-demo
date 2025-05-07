@@ -4,14 +4,25 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 // Define SpeechRecognition interfaces for TypeScript
 interface SpeechRecognitionEvent {
   resultIndex: number;
-  results: {
-    [key: number]: {
-      [key: number]: {
-        transcript: string;
-      };
-      isFinal: boolean;
-    };
-  };
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  length: number;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
 }
 
 interface SpeechRecognitionErrorEvent {
