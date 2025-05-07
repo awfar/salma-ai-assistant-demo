@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Volume2, Volume } from "lucide-react";
 import CallTimer from "@/components/CallTimer";
@@ -506,7 +505,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         </div>
       </div>
       
-      {/* Hidden audio player */}
+      {/* Hidden audio player - Fix the autoPlay prop type */}
       <AudioPlayer 
         audioSource={audioSource} 
         autoPlay={Boolean(isSpeakerOn && !isMuted)}
