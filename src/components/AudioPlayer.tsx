@@ -111,7 +111,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         audioRef.current.volume = isMuted ? 0 : volume;
         await audioRef.current.load();
         
-        console.log("🔊 تم تعيين مصدر صوت جديد");
+        console.log("🔊 تم تعيين مصدر صوت جديد:", audioSource.substring(0, 50) + "...");
         
         // Auto-play if enabled and not muted, but with a small delay to ensure loading
         if (autoPlay && !isMuted && audioLoaded) {
@@ -122,9 +122,18 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
                 const playPromise = audioRef.current.play();
                 
                 if (playPromise !== undefined) {
-                  await playPromise;
-                  isPlayingRef.current = true;
-                  if (onPlay) onPlay();
+                  try {
+                    await playPromise;
+                    isPlayingRef.current = true;
+                    if (onPlay) onPlay();
+                    console.log("✅ بدأ تشغيل الصوت بنجاح");
+                  } catch (playError) {
+                    console.error("❌ فشل الوعد بتشغيل الصوت:", playError);
+                    // حاول مرة أخرى إذا كان الخطأ بسبب تفاعل المستخدم
+                    if (playError.name === "NotAllowedError") {
+                      console.log("⚠️ يحتاج تفاعل المستخدم لتشغيل الصوت");
+                    }
+                  }
                 }
               }
             }, 300);
@@ -143,6 +152,7 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
     useEffect(() => {
       if (audioRef.current) {
         audioRef.current.volume = isMuted ? 0 : volume;
+        console.log("🔊 ضبط مستوى الصوت:", isMuted ? "مكتوم" : volume);
         
         // If muted during playback, pause the audio
         if (isMuted && isPlayingRef.current) {
@@ -151,6 +161,48 @@ const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         }
       }
     }, [volume, isMuted]);
+    
+    // Fix for mobile devices: try to play audio on first user interaction
+    useEffect(() => {
+      const handleUserInteraction = async () => {
+        // Try to initialize audio context on user interaction
+        if (audioRef.current && audioSource && autoPlay && !isMuted) {
+          try {
+            // Create a silent audio context to wake up audio on iOS
+            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const silentBuffer = audioContext.createBuffer(1, 1, 22050);
+            const source = audioContext.createBufferSource();
+            source.buffer = silentBuffer;
+            source.connect(audioContext.destination);
+            source.start(0);
+            
+            // Now try to play the actual audio
+            const playPromise = audioRef.current.play();
+            if (playPromise !== undefined) {
+              await playPromise;
+              isPlayingRef.current = true;
+              if (onPlay) onPlay();
+              console.log("✅ بدأ تشغيل الصوت بعد تفاعل المستخدم");
+            }
+          } catch (e) {
+            console.log("محاولة تشغيل الصوت بعد تفاعل المستخدم فشلت:", e);
+          }
+          
+          // Remove listeners after first interaction
+          document.removeEventListener('touchstart', handleUserInteraction);
+          document.removeEventListener('click', handleUserInteraction);
+        }
+      };
+      
+      // Add listeners for user interaction
+      document.addEventListener('touchstart', handleUserInteraction, { once: true });
+      document.addEventListener('click', handleUserInteraction, { once: true });
+      
+      return () => {
+        document.removeEventListener('touchstart', handleUserInteraction);
+        document.removeEventListener('click', handleUserInteraction);
+      };
+    }, [audioSource, autoPlay, isMuted, onPlay]);
     
     // Clean up on unmount
     useEffect(() => {

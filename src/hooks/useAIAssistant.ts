@@ -40,7 +40,6 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
     
     // Create a new abort controller
     abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
     
     try {
       setIsLoading(true);
