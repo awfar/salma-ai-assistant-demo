@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Mic, MicOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import SoundWave from "./SoundWave";
+import { playVerificationSound } from "@/utils/audioUtils";
 
 interface PushToTalkButtonProps {
   onStartRecording: () => void;
@@ -25,9 +26,39 @@ const PushToTalkButton: React.FC<PushToTalkButtonProps> = ({
   const [showRings, setShowRings] = useState(false);
   const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const maxRecordingTimeRef = useRef<NodeJS.Timeout | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  // Initialize audio context for button feedback sounds
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !audioContextRef.current) {
+      try {
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        audioContextRef.current = new AudioContext();
+        
+        // Create a silent buffer to initialize audio on iOS
+        const buffer = audioContextRef.current.createBuffer(1, 1, 22050);
+        const source = audioContextRef.current.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioContextRef.current.destination);
+        source.start();
+        
+        console.log("✅ Audio context initialized in PushToTalkButton");
+      } catch (err) {
+        console.error("❌ Failed to initialize audio context in PushToTalkButton:", err);
+      }
+    }
+    
+    return () => {
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(err => {
+          console.error("❌ Error closing AudioContext:", err);
+        });
+      }
+    };
+  }, []);
 
   // Start recording on pointer down (handles both mouse and touch)
-  const handleStart = (e: React.PointerEvent) => {
+  const handleStart = async (e: React.PointerEvent) => {
     if (disabled) return;
     
     // Prevent default behavior for touch events to avoid scrolling
@@ -35,6 +66,13 @@ const PushToTalkButton: React.FC<PushToTalkButtonProps> = ({
     
     setIsPressing(true);
     setShowRings(true);
+    
+    // Play a feedback sound when button is pressed
+    try {
+      await playVerificationSound(true);
+    } catch (err) {
+      console.error("❌ Failed to play feedback sound:", err);
+    }
     
     // Start recording immediately to improve responsiveness
     console.log("🎤 زر التحدث: بدء التسجيل");
@@ -48,7 +86,7 @@ const PushToTalkButton: React.FC<PushToTalkButtonProps> = ({
   };
 
   // Stop recording on pointer up
-  const handleStop = () => {
+  const handleStop = async () => {
     if (disabled) return;
     
     setIsPressing(false);
@@ -62,6 +100,13 @@ const PushToTalkButton: React.FC<PushToTalkButtonProps> = ({
     if (maxRecordingTimeRef.current) {
       clearTimeout(maxRecordingTimeRef.current);
       maxRecordingTimeRef.current = null;
+    }
+    
+    // Play a feedback sound when button is released
+    try {
+      await playVerificationSound(true);
+    } catch (err) {
+      console.error("❌ Failed to play feedback sound:", err);
     }
     
     // If we were actually recording (not just a quick tap)

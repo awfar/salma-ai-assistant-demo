@@ -1,5 +1,5 @@
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -11,10 +11,11 @@ import { testAudioOutput, playVerificationSound } from "@/utils/audioUtils";
 
 const AICallDemo = () => {
   const navigate = useNavigate();
-  const [callActive, setCallActive] = React.useState(false);
-  const [callStartTime, setCallStartTime] = React.useState<Date>(new Date());
-  const [micPermissionGranted, setMicPermissionGranted] = React.useState(false);
-  const [audioInitialized, setAudioInitialized] = React.useState(false);
+  const [callActive, setCallActive] = useState(false);
+  const [callStartTime, setCallStartTime] = useState<Date>(new Date());
+  const [micPermissionGranted, setMicPermissionGranted] = useState(false);
+  const [audioInitialized, setAudioInitialized] = useState(false);
+  const [audioInitialization, setAudioInitialization] = useState<'pending' | 'attempting' | 'success' | 'failed'>('pending');
   const { toast } = useToast();
   const micInitialized = useRef(false);
   const audioContextInitialized = useRef(false);
@@ -25,6 +26,7 @@ const AICallDemo = () => {
     const initializeAudio = async () => {
       try {
         console.log("🎤 Initializing audio and microphone...");
+        setAudioInitialization('attempting');
         
         // Initialize AudioContext first to wake up audio system
         if (!audioContextInitialized.current) {
@@ -48,6 +50,7 @@ const AICallDemo = () => {
             
             audioContextInitialized.current = true;
             setAudioInitialized(true);
+            setAudioInitialization('success');
             console.log("✅ Audio system successfully initialized");
             
             // Play a verification sound to ensure audio is working
@@ -61,6 +64,7 @@ const AICallDemo = () => {
             console.log("🔊 Audio output test:", audioOutputWorks ? "successful" : "failed");
           } catch (err) {
             console.error("❌ Failed to initialize audio system:", err);
+            setAudioInitialization('failed');
           }
         }
         
@@ -108,6 +112,7 @@ const AICallDemo = () => {
         }
       } catch (err) {
         console.error("❌ Error initializing audio:", err);
+        setAudioInitialization('failed');
       }
     };
     
@@ -205,6 +210,7 @@ const AICallDemo = () => {
       setMicPermissionGranted(true);
       setCallActive(true);
       setCallStartTime(new Date());
+      setAudioInitialization('success');
       
       toast({
         title: "Call Started",
@@ -238,6 +244,61 @@ const AICallDemo = () => {
   const handleSettingsClick = () => {
     navigate('/ai-settings');
   };
+  
+  // Handle audio activation attempts
+  const handleActivateAudio = async () => {
+    setAudioInitialization('attempting');
+    
+    toast({
+      title: "تنشيط الصوت",
+      description: "جاري محاولة تنشيط نظام الصوت...",
+      duration: 2000,
+    });
+    
+    try {
+      // Force initialize AudioContext
+      if (!audioContextRef.current) {
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        audioContextRef.current = new AudioContext();
+      }
+      
+      // Resume AudioContext if suspended
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
+        console.log("✅ AudioContext resumed via button");
+      }
+      
+      // Play a test tone to verify audio works
+      const success = await testAudioOutput(true);
+      
+      if (success) {
+        setAudioInitialized(true);
+        setAudioInitialization('success');
+        toast({
+          title: "تم تنشيط الصوت",
+          description: "تم تنشيط نظام الصوت بنجاح. يمكنك الآن استخدام المساعد الصوتي.",
+          duration: 3000,
+        });
+      } else {
+        setAudioInitialization('failed');
+        toast({
+          title: "فشل تنشيط الصوت",
+          description: "لم نتمكن من تنشيط نظام الصوت. يرجى النقر على الشاشة أو التحقق من إعدادات الجهاز.",
+          variant: "destructive",
+          duration: 5000,
+        });
+      }
+    } catch (err) {
+      console.error("❌ Error activating audio:", err);
+      setAudioInitialization('failed');
+      toast({
+        title: "خطأ في نظام الصوت",
+        description: "حدث خطأ أثناء محاولة تنشيط نظام الصوت. يرجى المحاولة مرة أخرى.",
+        variant: "destructive",
+        duration: 5000,
+      });
+    }
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-ministry-light">
@@ -261,6 +322,24 @@ const AICallDemo = () => {
       {/* Footer */}
       <CallFooter />
       
+      {/* Audio activation guide */}
+      <div className="fixed bottom-24 left-0 right-0 flex justify-center">
+        {audioInitialization === 'failed' && (
+          <div className="bg-red-100 text-red-800 border border-red-300 rounded-md p-3 shadow-lg max-w-md mx-4">
+            <h3 className="font-bold mb-1 text-center">⚠️ نظام الصوت غير نشط</h3>
+            <p className="text-sm mb-2">لاستخدام المساعد الصوتي، تحتاج إلى تنشيط نظام الصوت. انقر على زر "تنشيط الصوت" أدناه.</p>
+            <div className="flex justify-center">
+              <Button
+                onClick={handleActivateAudio}
+                className="bg-red-600 hover:bg-red-700 font-bold"
+              >
+                تنشيط الصوت
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+      
       {/* Audio debugging message */}
       {process.env.NODE_ENV !== 'production' && (
         <div className="fixed bottom-16 left-0 right-0 flex justify-center pointer-events-none">
@@ -272,72 +351,21 @@ const AICallDemo = () => {
         </div>
       )}
       
-      {/* Initial audio unlock button (more visible for troubleshooting) */}
+      {/* Audio activation button */}
       <button 
-        className="fixed bottom-4 left-4 z-50 bg-green-600 text-white px-3 py-1 rounded text-xs shadow-md"
-        onClick={() => {
-          // Force unlock audio with user feedback
-          toast({
-            title: "Audio System",
-            description: "Attempting to activate audio...",
-            duration: 2000,
-          });
-          
-          if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-            audioContextRef.current.resume().then(() => {
-              console.log("✅ AudioContext resumed via button");
-              playVerificationSound(false);
-              toast({
-                title: "Audio Activated",
-                description: "Audio system has been activated successfully.",
-                duration: 2000,
-              });
-            }).catch(err => {
-              console.error("❌ Failed to resume audio context:", err);
-              toast({
-                title: "Audio Error",
-                description: "Failed to activate audio. Try tapping the screen.",
-                variant: "destructive",
-                duration: 3000,
-              });
-            });
-          } else {
-            // Initialize audio context if it doesn't exist
-            try {
-              const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-              audioContextRef.current = new AudioContext();
-              
-              // Play a test sound
-              testAudioOutput(true).then(success => {
-                if (success) {
-                  toast({
-                    title: "Audio Activated",
-                    description: "Audio system has been activated successfully.",
-                    duration: 2000,
-                  });
-                } else {
-                  toast({
-                    title: "Audio Warning",
-                    description: "Audio test failed. Check your device settings.",
-                    variant: "destructive", 
-                    duration: 3000,
-                  });
-                }
-              });
-            } catch (err) {
-              console.error("❌ Error creating AudioContext:", err);
-              toast({
-                title: "Audio Error",
-                description: "Could not initialize audio system.",
-                variant: "destructive",
-                duration: 3000,
-              });
-            }
-          }
-        }}
+        className="fixed bottom-4 left-4 z-50 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow-md flex items-center gap-2 text-sm"
+        onClick={handleActivateAudio}
         aria-label="Activate audio"
       >
-        🔊 Activate Audio
+        {audioInitialization === 'attempting' ? (
+          <>
+            <span className="animate-spin">⟳</span> جاري تنشيط الصوت...
+          </>
+        ) : audioInitialization === 'success' ? (
+          <>🔊 تم تنشيط الصوت</>
+        ) : (
+          <>🔊 تنشيط الصوت</>
+        )}
       </button>
     </div>
   );
