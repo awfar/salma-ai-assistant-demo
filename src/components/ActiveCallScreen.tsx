@@ -438,7 +438,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         return;
       }
       
-      const welcomeMessage = "أهلا بيك في مؤسسه تكافل و كرامه معاك خالد موظف الذكاء الاصطناعي أنا هنا عشان اجاوبك علي كل الاستفسارات ازاي اقدر اساعدك؟";
+      const welcomeMessage = "أهلا بيك في وزارة التضامن تكافل معاك سلمى مساعدتك الذكية أنا هنا عشان اجاوبك على كل الاستفسارات ازاي اقدر اساعدك؟";
       addMessage(welcomeMessage, "assistant");
       
       // Convert text to speech
