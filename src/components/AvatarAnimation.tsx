@@ -162,7 +162,7 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
     >
       <div className="relative">
         <img 
-          src="/lovable-uploads/498da759-9d56-403c-b889-7a34fa5734e5.png" 
+          src="/lovable-uploads/03798977-4494-41de-b034-de18ed7e25a9.png" 
           alt="سلمى المساعد الافتراضي" 
           className={cn(
             "object-cover max-h-full w-auto transition-all", 
@@ -170,31 +170,7 @@ const AvatarAnimation: React.FC<AvatarAnimationProps> = ({
           )}
         />
         
-        {/* Mouth representation for simple lip sync */}
-        <div 
-          className="absolute bottom-[26%] left-1/2 transform -translate-x-1/2"
-          style={{ width: '12%' }}
-        >
-          <div 
-            ref={mouthRef}
-            className="bg-black/60 rounded-full w-full h-1 transition-all"
-            style={{ opacity: 0.6 }}
-          ></div>
-        </div>
-        
-        {/* Eye representation for blinking */}
-        <div className="absolute top-[38%] left-[43%] transform -translate-x-1/2 -translate-y-1/2">
-          <div 
-            ref={(el) => { if (el) eyesRef.current[0] = el; }}
-            className="bg-black/90 rounded-full w-4 h-4 transition-all duration-200"
-          ></div>
-        </div>
-        <div className="absolute top-[38%] right-[43%] transform translate-x-1/2 -translate-y-1/2">
-          <div 
-            ref={(el) => { if (el) eyesRef.current[1] = el; }}
-            className="bg-black/90 rounded-full w-4 h-4 transition-all duration-200"
-          ></div>
-        </div>
+        {/* Mouth and eye animations are disabled for the new avatar since it's a realistic photo */}
       </div>
       
       {/* Listening state - enhanced with audio level waves */}
