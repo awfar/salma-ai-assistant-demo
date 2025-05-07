@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -7,6 +6,7 @@ import CallHeader from "@/components/CallHeader";
 import CallStartScreen from "@/components/CallStartScreen";
 import ActiveCallScreen from "@/components/ActiveCallScreen";
 import CallFooter from "@/components/CallFooter";
+import { testAudioOutput } from "@/utils/audioUtils";
 
 const AICallDemo = () => {
   const navigate = useNavigate();
@@ -44,6 +44,10 @@ const AICallDemo = () => {
             
             audioContextInitialized.current = true;
             console.log("✅ Audio system successfully initialized");
+            
+            // Test audio output
+            const audioOutputWorks = await testAudioOutput();
+            console.log("🔊 Audio output test:", audioOutputWorks ? "successful" : "failed");
           } catch (err) {
             console.error("❌ Failed to initialize audio system:", err);
           }
@@ -76,8 +80,11 @@ const AICallDemo = () => {
               console.log("🎤 Audio track settings:", stream.getAudioTracks()[0].getSettings());
             }
             
-            // Release the microphone immediately after checking permission
-            stream.getTracks().forEach(track => track.stop());
+            // Keep the stream active for a moment to ensure it's properly initialized
+            setTimeout(() => {
+              // Release the microphone after initialization
+              stream.getTracks().forEach(track => track.stop());
+            }, 1000);
           } catch (err) {
             console.error("❌ Error accessing microphone:", err);
             toast({
@@ -124,6 +131,15 @@ const AICallDemo = () => {
     try {
       console.log("🎤 Starting call and initializing audio...");
       
+      // Play a silent audio to unlock audio on iOS/Safari
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      const audioContext = new AudioContext();
+      const silentBuffer = audioContext.createBuffer(1, 1, 22050);
+      const source = audioContext.createBufferSource();
+      source.buffer = silentBuffer;
+      source.connect(audioContext.destination);
+      source.start();
+      
       // Request microphone permission
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -133,8 +149,11 @@ const AICallDemo = () => {
         } 
       });
       
-      // Release the microphone immediately after confirming permission
-      stream.getTracks().forEach(track => track.stop());
+      // Keep the microphone active for a short period to properly initialize
+      setTimeout(() => {
+        // Release the microphone
+        stream.getTracks().forEach(track => track.stop());
+      }, 1000);
       
       // Start call
       setMicPermissionGranted(true);

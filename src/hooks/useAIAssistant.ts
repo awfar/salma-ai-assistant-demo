@@ -2,6 +2,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useToast } from "./use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { testAudioOutput } from "@/utils/audioUtils";
 
 interface TextToSpeechCallbacks {
   onStart?: () => void;
@@ -32,8 +33,17 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
     const initAudioContext = () => {
       try {
         if (!audioContextRef.current) {
+          console.log("🔊 Initializing AudioContext");
           const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
           audioContextRef.current = new AudioContextClass();
+          
+          // Create and play a short silent sound to unlock audio on iOS/Safari
+          const silentBuffer = audioContextRef.current.createBuffer(1, 1, 22050);
+          const source = audioContextRef.current.createBufferSource();
+          source.buffer = silentBuffer;
+          source.connect(audioContextRef.current.destination);
+          source.start(0);
+          
           console.log("✅ AudioContext successfully created");
         }
       } catch (err) {
@@ -47,14 +57,30 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       
       // If AudioContext is suspended, resume it
       if (audioContextRef.current && audioContextRef.current.state === "suspended") {
-        audioContextRef.current.resume();
+        audioContextRef.current.resume().then(() => {
+          console.log("✅ AudioContext resumed");
+          
+          // Test audio output after resuming
+          testAudioOutput().then(success => {
+            if (success) {
+              console.log("✅ Audio output test successful");
+            } else {
+              console.error("❌ Audio output test failed");
+            }
+          });
+        }).catch(err => {
+          console.error("❌ Failed to resume AudioContext:", err);
+        });
       }
     };
 
     // Add handlers for various events that indicate user interaction
-    window.addEventListener("click", handleUserInteraction, { once: true });
-    window.addEventListener("touchstart", handleUserInteraction, { once: true });
-    window.addEventListener("keydown", handleUserInteraction, { once: true });
+    window.addEventListener("click", handleUserInteraction);
+    window.addEventListener("touchstart", handleUserInteraction);
+    window.addEventListener("keydown", handleUserInteraction);
+    
+    // Try to initialize immediately
+    initAudioContext();
 
     return () => {
       window.removeEventListener("click", handleUserInteraction);
@@ -143,26 +169,33 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       setIsAudioLoading(true);
       callbacks?.onStart?.();
       
-      // Get the authentication session
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
+      // Get the current origin for building the correct endpoint URL
+      const origin = window.location.origin;
+      console.log("🌐 Using origin for TTS endpoint:", origin);
+      
+      // Full URL to text-to-speech edge function
+      const ttsEndpoint = `${origin}/functions/v1/text-to-speech`;
+      console.log("🔊 TTS endpoint URL:", ttsEndpoint);
       
       console.log("🔊 Starting text to speech streaming:", text.substring(0, 50) + "...");
 
       // Call the Edge Function with proper content type
-      const response = await fetch(`${window.location.origin}/functions/v1/text-to-speech`, {
+      const response = await fetch(ttsEndpoint, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { "Authorization": `Bearer ${accessToken}` } : {})
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({ 
           text, 
-          stream: true
+          stream: true,
+          voice: "EXAVITQu4vr4xnSDxMaL" // Sarah voice - reliable for testing
         })
       });
 
       if (!response.ok || !response.body) {
+        console.error(`❌ TTS streaming failed with status: ${response.status}`);
+        const errorText = await response.text();
+        console.error("Error response:", errorText);
         throw new Error(`Failed to stream text to speech: ${response.status}`);
       }
 
@@ -172,11 +205,13 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       if (!audioContextRef.current) {
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
         audioContextRef.current = new AudioContextClass();
+        console.log("✅ Created new AudioContext for streaming");
       }
 
       // If AudioContext is suspended, resume it
       if (audioContextRef.current.state === "suspended") {
         await audioContextRef.current.resume();
+        console.log("✅ Resumed AudioContext");
       }
 
       // Create a reader for the stream
@@ -193,6 +228,8 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
         
         if (audioContextRef.current && value) {
           try {
+            console.log(`✅ Received audio chunk: ${value.buffer.byteLength} bytes`);
+            
             // Decode the audio data
             const audioBuffer = await audioContextRef.current.decodeAudioData(value.buffer.slice(0));
             
@@ -234,15 +271,17 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       // Try falling back to non-streaming mode
       console.log("🔄 Attempting fallback to non-streaming TTS...");
       try {
-        const audioUrl = await textToSpeech(text, callbacks);
+        callbacks?.onStart?.();
+        const audioUrl = await textToSpeech(text);
         if (!audioUrl) {
           throw new Error("Failed to get audio URL in fallback mode");
         }
+        console.log("✅ Successfully got audio URL from fallback method");
       } catch (fallbackError) {
         console.error("❌ Fallback TTS also failed:", fallbackError);
         toast({
           title: "Error Converting Text to Speech",
-          description: "All text-to-speech methods failed. Please check your connection and try again.",
+          description: "Could not convert text to speech. Please check your connection and try again.",
           variant: "destructive",
         });
       }
@@ -264,17 +303,36 @@ export const useAIAssistant = (): UseAIAssistantReturn => {
       
       console.log("🔊 Converting text to speech:", text.substring(0, 50) + "...");
       
-      // Call the text-to-speech Edge Function
-      const { data, error } = await supabase.functions.invoke('text-to-speech', {
-        body: { text, stream: false }
+      // Get the current origin for building the correct endpoint URL
+      const origin = window.location.origin;
+      console.log("🌐 Using origin for TTS endpoint:", origin);
+      
+      // Full URL to text-to-speech edge function
+      const ttsEndpoint = `${origin}/functions/v1/text-to-speech`;
+      console.log("🔊 TTS endpoint URL:", ttsEndpoint);
+      
+      // Direct fetch to edge function without supabase client
+      const response = await fetch(ttsEndpoint, {
+        method: "POST",
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          text, 
+          stream: false,
+          voice: "EXAVITQu4vr4xnSDxMaL" // Sarah voice - reliable for testing
+        })
       });
       
-      if (error || !data) {
-        console.error("Error in text-to-speech:", error || "No data returned");
-        throw new Error(error?.message || "Failed to convert text to speech");
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`❌ TTS endpoint error: ${response.status}`, errorText);
+        throw new Error(`Failed to convert text to speech: ${response.status}`);
       }
       
-      if (!data.audio) {
+      const data = await response.json();
+      
+      if (!data || !data.audio) {
         console.error("No audio data returned");
         throw new Error("No audio data returned");
       }

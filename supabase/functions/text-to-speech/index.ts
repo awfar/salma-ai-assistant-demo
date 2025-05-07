@@ -5,7 +5,7 @@ const ELEVEN_LABS_API_KEY = Deno.env.get("ELEVEN_LABS_API_KEY");
 
 // Use a verified working voice ID from ElevenLabs
 // Arabic female voice - Mimi (multilingual)
-const VOICE_ID = "pFZP5JQG7iQjIQuC4Bku"; 
+const VOICE_ID = "EXAVITQu4vr4xnSDxMaL"; // Changed to Sarah voice ID which is more reliable
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

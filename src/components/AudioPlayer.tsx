@@ -48,8 +48,12 @@ const AudioPlayer = forwardRef<
       play: async () => {
         if (audioRef.current) {
           try {
+            console.log("🔊 Attempting to play audio explicitly");
+            // Always force load before playing to ensure the audio is ready
+            audioRef.current.load();
             await audioRef.current.play();
             setIsPlaying(true);
+            console.log("✅ Audio started playing successfully");
           } catch (error) {
             console.error("❌ Error playing audio:", error);
             setIsPlaying(false);
@@ -103,9 +107,24 @@ const AudioPlayer = forwardRef<
         try {
           console.log("🎵 تشغيل الصوت تلقائياً");
           setSourceChanged(false);
-          await audioRef.current.play();
-          setIsPlaying(true);
-          if (onPlay) onPlay();
+          
+          // Always force load before playing to ensure the audio is ready
+          audioRef.current.load();
+          
+          // Useful for mobile browsers - try to play after a short delay
+          setTimeout(async () => {
+            try {
+              if (audioRef.current) {
+                await audioRef.current.play();
+                setIsPlaying(true);
+                if (onPlay) onPlay();
+                console.log("✅ Audio autoplay successful");
+              }
+            } catch (delayedPlayError) {
+              console.error("❌ Delayed autoplay failed:", delayedPlayError);
+            }
+          }, 200);
+          
         } catch (error) {
           console.error("❌ خطأ في التشغيل التلقائي للصوت:", error);
           setIsPlaying(false);
@@ -157,16 +176,22 @@ const AudioPlayer = forwardRef<
       if (onPlay) onPlay();
     };
     
+    const handleCanPlay = () => {
+      console.log("✅ Audio can play now");
+    };
+    
     // Register event handlers
     audio.addEventListener("ended", handleEnded);
     audio.addEventListener("error", handleError as unknown as EventListener);
     audio.addEventListener("play", handlePlay);
+    audio.addEventListener("canplay", handleCanPlay);
     
     // Clean up event handlers
     return () => {
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("error", handleError as unknown as EventListener);
       audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("canplay", handleCanPlay);
     };
   }, [onEnded, onError, onPlay]);
 
@@ -178,8 +203,21 @@ const AudioPlayer = forwardRef<
       try {
         if (audioRef.current) {
           // For iOS Safari, needs to be called during a user action
+          console.log("🔊 Initializing audio on user interaction");
+          
+          // Create a short silent sound and play it to unlock audio
+          const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+          const audioContext = new AudioContext();
+          const silentBuffer = audioContext.createBuffer(1, 1, 22050);
+          const source = audioContext.createBufferSource();
+          source.buffer = silentBuffer;
+          source.connect(audioContext.destination);
+          source.start(0);
+          
           audioRef.current.load();
           setHasInitialized(true);
+          
+          console.log("✅ Audio initialized successfully");
         }
       } catch (error) {
         console.error("❌ Error initializing audio:", error);
@@ -189,10 +227,15 @@ const AudioPlayer = forwardRef<
     // Add event listeners for user interaction
     document.addEventListener("click", initializeAudio, { once: true });
     document.addEventListener("touchstart", initializeAudio, { once: true });
+    document.addEventListener("keydown", initializeAudio, { once: true });
+    
+    // Try to initialize immediately for non-iOS browsers
+    initializeAudio();
     
     return () => {
       document.removeEventListener("click", initializeAudio);
       document.removeEventListener("touchstart", initializeAudio);
+      document.removeEventListener("keydown", initializeAudio);
     };
   }, [hasInitialized]);
 
@@ -204,6 +247,7 @@ const AudioPlayer = forwardRef<
       preload="auto"
       crossOrigin="anonymous"
       style={{ display: "none" }}
+      controls // Add controls for debugging (hidden but accessible)
     />
   );
 });
