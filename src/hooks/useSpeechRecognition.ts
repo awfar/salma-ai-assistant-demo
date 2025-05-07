@@ -77,6 +77,8 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
   const analyserRef = useRef<AnalyserNode | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const initAttemptRef = useRef<number>(0);
+  const maxInitAttempts = 3;
   
   // Reset transcript
   const resetTranscript = useCallback(() => {
@@ -90,13 +92,21 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         
         if (!mediaStreamRef.current) {
-          mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ 
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
+            } 
+          });
+          console.log("🎤 Audio input started. Microphone access granted!");
         }
         
         const source = audioContextRef.current.createMediaStreamSource(mediaStreamRef.current);
         analyserRef.current = audioContextRef.current.createAnalyser();
         analyserRef.current.fftSize = 256;
         source.connect(analyserRef.current);
+        console.log("✅ Audio analyzer set up successfully");
       } catch (err) {
         console.error('Error initializing audio context:', err);
       }
@@ -121,6 +131,11 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     const normalizedValue = Math.min(average / 128, 1);
     setAudioLevel(normalizedValue);
     
+    // Log periodically, not for every frame
+    if (Math.random() < 0.01 && normalizedValue > 0.1) {
+      console.log(`📊 Capturing audio level: ${normalizedValue.toFixed(2)}, bytes: ${dataArray.length}`);
+    }
+    
     if (onAudioLevelChange) {
       onAudioLevelChange(normalizedValue);
     }
@@ -142,6 +157,13 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       const SpeechRecognitionAPI = (window as any).SpeechRecognition || 
                                   (window as any).webkitSpeechRecognition;
       
+      if (!SpeechRecognitionAPI) {
+        console.error("❌ SpeechRecognition API not available");
+        setError(new Error('Speech recognition API not available.'));
+        return false;
+      }
+      
+      console.log("🎤 Initializing speech recognition...");
       recognitionRef.current = new SpeechRecognitionAPI();
       
       recognitionRef.current.continuous = true;
@@ -149,6 +171,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       recognitionRef.current.lang = language;
       
       recognitionRef.current.onstart = () => {
+        console.log("🎤 Speech recognition started");
         setIsListening(true);
         setError(null);
         if (onListeningChange) {
@@ -158,15 +181,22 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       
       recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error('Speech recognition error:', event.error);
-        setError(new Error(`Speech recognition error: ${event.error}`));
         
         if (event.error === 'no-speech') {
           // No speech detected, not really an error
           setError(null);
+        } else if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          setError(new Error(`Microphone access denied: ${event.error}`));
+        } else if (event.error === 'aborted') {
+          // Aborted error is often temporary, so we'll just set a minimal error
+          setError(new Error(`Speech recognition error: ${event.error}`));
+        } else {
+          setError(new Error(`Speech recognition error: ${event.error}`));
         }
       };
       
       recognitionRef.current.onend = () => {
+        console.log("🎤 Speech recognition ended");
         setIsListening(false);
         if (onListeningChange) {
           onListeningChange(false);
@@ -182,6 +212,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
           if (event.results[i].isFinal) {
             finalTranscript += transcript;
             setIsProcessing(true);
+            console.log("🔊 Final transcript:", finalTranscript);
             if (onProcessingChange) {
               onProcessingChange(true);
             }
@@ -195,6 +226,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
         
         if (finalTranscript && onResult) {
           // Submit final transcript to callback
+          console.log("✅ Sending transcript to processing:", finalTranscript);
           onResult(finalTranscript);
           
           // Reset after processing
@@ -211,10 +243,26 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     return true;
   }, [language, onListeningChange, onProcessingChange, onResult]);
 
-  // Start listening
+  // Start listening with retry mechanism
   const startListening = useCallback(async () => {
     try {
+      console.log("🎤 Starting speech recognition...");
+      
       if (!initRecognition()) {
+        console.error("❌ Failed to initialize speech recognition");
+        
+        // Attempt to reinitialize if under the max attempts
+        if (initAttemptRef.current < maxInitAttempts) {
+          initAttemptRef.current++;
+          console.log(`🔄 Retry attempt ${initAttemptRef.current}/${maxInitAttempts}`);
+          
+          // Try to re-init recognition after a delay
+          setTimeout(() => {
+            if (initRecognition()) {
+              startListening();
+            }
+          }, 1000);
+        }
         return;
       }
       
@@ -223,9 +271,26 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       
       // Start recognition
       if (recognitionRef.current) {
-        recognitionRef.current.start();
-        // Start measuring audio level
-        measureAudioLevel();
+        try {
+          recognitionRef.current.start();
+          console.log("🎤 Speech recognition actively listening");
+          
+          // Start measuring audio level
+          measureAudioLevel();
+        } catch (err) {
+          console.error("❌ Error starting speech recognition:", err);
+          
+          // If recognition is already started, stop it and restart
+          if (err instanceof DOMException && err.name === 'InvalidStateError') {
+            recognitionRef.current.stop();
+            setTimeout(() => {
+              if (recognitionRef.current) {
+                recognitionRef.current.start();
+                console.log("🔄 Restarted speech recognition after InvalidStateError");
+              }
+            }, 300);
+          }
+        }
       }
     } catch (err) {
       console.error('Error starting speech recognition:', err);
@@ -238,6 +303,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
     try {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
+        console.log("🛑 Speech recognition stopped");
       }
       
       // Stop measuring audio level

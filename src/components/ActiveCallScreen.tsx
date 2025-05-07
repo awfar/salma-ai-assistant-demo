@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Volume2, Volume } from "lucide-react";
 import CallTimer from "@/components/CallTimer";
@@ -63,8 +64,8 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     "عندي سؤال عن برنامج كرامة",
   ]);
 
-  // Speech recognition handling
-  const handleTranscriptResult = async (text: string) => {
+  // Process user input (from voice or button)
+  const processUserInput = async (text: string) => {
     if (!text.trim()) return;
     
     // Show current transcript
@@ -76,16 +77,18 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     resetTranscript();
     
     // Get response from AI assistant
+    console.log("🤖 جاري إرسال الطلب إلى المساعد الذكي...");
     const aiResponse = await askAssistant(text.trim());
     
     if (aiResponse) {
-      console.log("🤖 رد المساعد الذكي:", aiResponse);
+      console.log("🤖 تم استلام رد المساعد الذكي:", aiResponse);
       
       // Add assistant response
       addMessage(aiResponse, "assistant");
       
       // Convert text to speech
       if (!isMuted && isSpeakerOn) {
+        console.log("🔊 جاري تحويل النص إلى كلام...");
         const audioUrl = await textToSpeech(aiResponse, {
           onStart: () => {
             console.log("🔊 بدء تشغيل الصوت");
@@ -98,6 +101,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         });
         
         if (audioUrl) {
+          console.log("🔊 تم الحصول على رابط الصوت:", audioUrl.substring(0, 50) + "...");
           setAudioSource(audioUrl);
         } else {
           console.error("❌ فشل في الحصول على URL للصوت");
@@ -121,6 +125,11 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         scheduleListening(1000);
       }
     }
+  };
+
+  // Speech recognition handling - directly use processUserInput
+  const handleTranscriptResult = (text: string) => {
+    processUserInput(text);
   };
 
   // Reset silence detection when audio level changes
@@ -168,7 +177,8 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     },
     onProcessingChange: (processing) => {
       console.log("🎤 حالة المعالجة:", processing ? "جاري المعالجة" : "متوقف");
-    }
+    },
+    onAudioLevelChange: handleAudioLevelChange
   });
 
   // Update transcript and monitor audio level during listening
@@ -178,9 +188,6 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       if (transcript) {
         setCurrentTranscript(transcript);
       }
-      
-      // Monitor audio level for silence detection
-      handleAudioLevelChange(audioLevel);
       
       // Set maximum listening time (8 seconds) as safety
       if (!maxListeningTimeRef.current) {
@@ -199,7 +206,7 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         maxListeningTimeRef.current = null;
       }
     }
-  }, [transcript, isListening, audioLevel, stopListening, handleAudioLevelChange]);
+  }, [transcript, isListening, stopListening]);
 
   // Schedule listening after a delay
   const scheduleListening = (delay: number = 500) => {
@@ -215,8 +222,8 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     }, delay);
   };
 
-  // Handle suggested question selection
-  const handleQuestionSelect = async (question: string) => {
+  // Handle suggested question selection - use processUserInput directly
+  const handleQuestionSelect = (question: string) => {
     if (isSpeaking || isTranscribing || isAIThinking || isListening) {
       console.log("❌ لا يمكن معالجة السؤال المقترح الآن:", {
         isSpeaking,
@@ -234,40 +241,8 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
     
     console.log("📝 معالجة سؤال مقترح:", question);
     
-    // Show question in transcript bar
-    setCurrentTranscript(question);
-    
-    // Add question as user message
-    addMessage(question, "user");
-    
-    // Get response from AI assistant
-    const aiResponse = await askAssistant(question);
-    
-    if (aiResponse) {
-      // Add assistant response
-      addMessage(aiResponse, "assistant");
-      
-      // Convert text to speech
-      if (!isMuted && isSpeakerOn) {
-        const audioUrl = await textToSpeech(aiResponse, {
-          onStart: () => setIsSpeaking(true),
-          onEnd: () => setIsSpeaking(false)
-        });
-        
-        if (audioUrl) {
-          setAudioSource(audioUrl);
-        } else {
-          handleAudioEnded();
-        }
-      } else {
-        handleAudioEnded();
-      }
-    } else {
-      // Start listening again
-      if (!isMuted) {
-        scheduleListening(1000);
-      }
-    }
+    // Process the question directly using the same pipeline as voice input
+    processUserInput(question);
   };
 
   // When audio ends, start listening automatically
@@ -422,7 +397,13 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   // Pre-initialize microphone
   useEffect(() => {
     // Pre-request microphone permissions
-    navigator.mediaDevices.getUserMedia({ audio: true })
+    navigator.mediaDevices.getUserMedia({ 
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      } 
+    })
       .then(() => console.log("✅ تم الحصول على إذن الميكروفون مسبقًا"))
       .catch(err => console.error("❌ خطأ في الوصول إلى الميكروفون:", err));
   }, []);
@@ -438,10 +419,12 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       }
       
       const welcomeMessage = "أهلا بيك في وزارة التضامن الاجتماعي، معاك سلمى مساعدتك الذكية أنا هنا عشان اجاوبك على كل الاستفسارات ازاي اقدر اساعدك؟";
+      console.log("🤖 رسالة الترحيب:", welcomeMessage);
       addMessage(welcomeMessage, "assistant");
       
       // Convert text to speech
       if (isSpeakerOn) {
+        console.log("🔊 جاري تحويل رسالة الترحيب إلى صوت...");
         const audioUrl = await textToSpeech(welcomeMessage, {
           onStart: () => setIsSpeaking(true),
           onEnd: () => setIsSpeaking(false)
@@ -609,7 +592,10 @@ const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         audioSource={audioSource} 
         autoPlay={Boolean(isSpeakerOn && !isMuted)}
         onEnded={handleAudioEnded}
-        onPlay={() => setIsSpeaking(true)}
+        onPlay={() => {
+          setIsSpeaking(true);
+          console.log("🎵 بدأ تشغيل الصوت");
+        }}
         onError={(e) => {
           console.error("❌ خطأ في تشغيل الصوت:", e);
           handleAudioEnded();

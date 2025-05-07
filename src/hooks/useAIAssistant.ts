@@ -1,6 +1,7 @@
 
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 interface TextToSpeechOptions {
   onStart?: () => void;
@@ -10,11 +11,13 @@ interface TextToSpeechOptions {
 export const useAIAssistant = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isAudioLoading, setIsAudioLoading] = useState(false);
+  const { toast } = useToast();
 
   // إرسال طلب للمساعد الذكي مع رسالة المستخدم
   const askAssistant = useCallback(async (userMessage: string) => {
     try {
       setIsLoading(true);
+      console.log("🤖 جاري إرسال السؤال إلى المساعد الذكي:", userMessage);
 
       const systemMessage = `أنت سلمى، مساعدة ذكية متخصصة في برنامج تكافل وكرامة التابع لوزارة التضامن الاجتماعي المصرية. 
 مهمتك الأساسية هي تقديم المساعدة والدعم للمواطنين المستفيدين أو المتقدمين للبرنامج، والإجابة على استفساراتهم بدقة وكفاءة، وتوجيههم خلال مختلف مراحل البرنامج.
@@ -66,18 +69,39 @@ export const useAIAssistant = () => {
       });
 
       if (error) {
-        console.error('خطأ في الحصول على الرد من المساعد الذكي:', error);
+        console.error('❌ خطأ في الحصول على الرد من المساعد الذكي:', error);
+        toast({
+          title: "خطأ في الاتصال",
+          description: "حدث خطأ أثناء الاتصال بالمساعد الذكي. يرجى المحاولة مرة أخرى.",
+          variant: "destructive",
+        });
         return null;
       }
 
-      return data?.response || null;
+      console.log("✅ تم استلام رد من المساعد الذكي:", data?.response || "لا يوجد رد");
+      
+      if (!data?.response) {
+        toast({
+          title: "خطأ في الاستجابة",
+          description: "لم نتمكن من الحصول على رد من المساعد الذكي. يرجى المحاولة مرة أخرى.",
+          variant: "destructive",
+        });
+        return null;
+      }
+
+      return data.response || null;
     } catch (err) {
-      console.error('خطأ غير متوقع في المساعد الذكي:', err);
+      console.error('❌ خطأ غير متوقع في المساعد الذكي:', err);
+      toast({
+        title: "خطأ غير متوقع",
+        description: "حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.",
+        variant: "destructive",
+      });
       return null;
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   // تحويل النص إلى كلام باستخدام ElevenLabs
   const textToSpeech = useCallback(async (text: string, options?: TextToSpeechOptions) => {
@@ -86,6 +110,8 @@ export const useAIAssistant = () => {
       if (options?.onStart) {
         options.onStart();
       }
+
+      console.log("🔊 جاري تحويل النص إلى كلام:", text.substring(0, 50) + "...");
 
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
         body: { 
@@ -99,7 +125,12 @@ export const useAIAssistant = () => {
       });
 
       if (error) {
-        console.error('خطأ في تحويل النص إلى كلام:', error);
+        console.error('❌ خطأ في تحويل النص إلى كلام:', error);
+        toast({
+          title: "خطأ في تحويل النص إلى صوت",
+          description: "حدث خطأ أثناء تحويل النص إلى صوت. سيتم عرض الرد كنص فقط.",
+          variant: "destructive",
+        });
         if (options?.onEnd) {
           options.onEnd();
         }
@@ -107,21 +138,34 @@ export const useAIAssistant = () => {
       }
 
       // إنشاء URL للصوت من البيانات Base64
-      const audioBase64 = data.audio;
+      const audioBase64 = data?.audio;
       if (!audioBase64) {
-        console.error('لم يتم استلام بيانات صوتية');
+        console.error('❌ لم يتم استلام بيانات صوتية');
+        toast({
+          title: "خطأ في البيانات الصوتية",
+          description: "لم يتم استلام بيانات صوتية من الخادم.",
+          variant: "destructive",
+        });
         if (options?.onEnd) {
           options.onEnd();
         }
         return null;
       }
 
+      console.log("✅ تم استلام البيانات الصوتية بنجاح");
+
       const audioBlob = base64ToBlob(audioBase64, 'audio/mpeg');
       const audioUrl = URL.createObjectURL(audioBlob);
-
+      
+      console.log("✅ تم إنشاء عنوان URL للصوت:", audioUrl.substring(0, 30) + "...");
       return audioUrl;
     } catch (err) {
-      console.error('خطأ غير متوقع في تحويل النص إلى كلام:', err);
+      console.error('❌ خطأ غير متوقع في تحويل النص إلى كلام:', err);
+      toast({
+        title: "خطأ في معالجة الصوت",
+        description: "حدث خطأ أثناء معالجة الصوت.",
+        variant: "destructive",
+      });
       if (options?.onEnd) {
         options.onEnd();
       }
@@ -129,26 +173,32 @@ export const useAIAssistant = () => {
     } finally {
       setIsAudioLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   // تحويل Base64 إلى Blob
   const base64ToBlob = (base64: string, mimeType: string): Blob => {
-    const byteCharacters = atob(base64);
-    const byteArrays = [];
-    
-    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-      const slice = byteCharacters.slice(offset, offset + 512);
+    try {
+      const byteCharacters = atob(base64);
+      const byteArrays = [];
       
-      const byteNumbers = new Array(slice.length);
-      for (let i = 0; i < slice.length; i++) {
-        byteNumbers[i] = slice.charCodeAt(i);
+      for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+        const slice = byteCharacters.slice(offset, offset + 512);
+        
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
+        }
+        
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
       }
       
-      const byteArray = new Uint8Array(byteNumbers);
-      byteArrays.push(byteArray);
+      return new Blob(byteArrays, { type: mimeType });
+    } catch (error) {
+      console.error("❌ خطأ في تحويل Base64 إلى Blob:", error);
+      // Return a minimal empty audio blob to prevent crashes
+      return new Blob([""], { type: mimeType });
     }
-    
-    return new Blob(byteArrays, { type: mimeType });
   };
 
   return {
